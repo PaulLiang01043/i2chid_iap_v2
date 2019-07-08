@@ -98,9 +98,10 @@ int send_fw_version_command(void)
     return err;
 }
 
-int read_fw_version_data(void)
+int read_fw_version_data(bool quiet /* Silent Mode */)
 {
-    int major_fw_ver = 0,
+    int fw_ver = 0,
+		major_fw_ver = 0,
         minor_fw_ver = 0,
         err = TP_SUCCESS;
     unsigned char cmd_data[4] = {0};
@@ -118,7 +119,11 @@ int read_fw_version_data(void)
     {
         major_fw_ver = ((cmd_data[1] & 0x0f) << 4) | ((cmd_data[2] & 0xf0) >> 4);
         minor_fw_ver = ((cmd_data[2] & 0x0f) << 4) | ((cmd_data[3] & 0xf0) >> 4);
-        printf("Firmware Version: %02x.%02x\r\n", major_fw_ver, minor_fw_ver);
+		fw_ver = (major_fw_ver << 8) | minor_fw_ver;
+		if(quiet == true) // Enable Silent Mode
+			printf("%04x", fw_ver);
+		else // Disable Silent Mode
+        	printf("Firmware Version: %02x.%02x\r\n", major_fw_ver, minor_fw_ver);
     }
 
     err = TP_SUCCESS;

@@ -135,7 +135,7 @@ int read_fw_id_data(void);
 
 // FW Version
 int send_fw_version_command(void);
-int read_fw_version_data(void);
+int read_fw_version_data(bool quiet /* Silent Mode */);
 
 // Test Version
 int send_test_version_command(void);

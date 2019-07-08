@@ -26,7 +26,7 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"2.2"
+#define	ELAN_TOOL_SW_VERSION 	"2.4"
 #endif //ELAN_TOOL_SW_VERSION
 
 // File Length
@@ -38,6 +38,15 @@
 #ifndef ERROR_RETRY_COUNT
 #define ERROR_RETRY_COUNT	3
 #endif //ERROR_RETRY_COUNT
+
+// Result Log Information
+#ifndef FILE_NAME_LENGTH_MAX
+#define FILE_NAME_LENGTH_MAX	128
+#endif //FILE_NAME_LENGTH_MAX
+
+#ifndef DEFAULT_LOG_FILENAME
+#define DEFAULT_LOG_FILENAME	"result.txt"
+#endif //DEFAULT_LOG_FILENAME
 
 /*******************************************
  * Global Variables Declaration
@@ -74,11 +83,17 @@ bool g_get_fw_info = false;
 // Re-Calibration (Re-K)
 bool g_rek = false;
 
+// Result Log
+char g_log_file[FILE_NAME_LENGTH_MAX] = {0};
+
+// Silent Mode (Quiet)
+bool g_quiet = false;
+
 // Help Info.
 bool g_help = false;
 
 // Parameter Option Settings
-const char* const short_options = "p:P:f:oikdh";
+const char* const short_options = "p:P:f:oikl:qdh";
 const struct option long_options[] =
 {
 	{ "pid",					1, NULL, 'p'},
@@ -86,6 +101,8 @@ const struct option long_options[] =
 	{ "file_path",				1, NULL, 'f'},
 	{ "firmware_information",	0, NULL, 'i'},
 	{ "calibration",			0, NULL, 'k'},
+	{ "log_filename",			1, NULL, 'l'},
+	{ "quiet",					0, NULL, 'q'},
     { "debug",					0, NULL, 'd'},
 	{ "help",					0, NULL, 'h'},
 };
@@ -102,7 +119,7 @@ int compute_firmware_page_number(int firmware_size);
 int retrieve_data_from_firmware(unsigned char *data, int data_size);
 
 // Firmware Information
-int get_firmware_information(void);
+int get_firmware_information(bool quiet /* Silent Mode */);
 
 // Calibration
 int calibrate_touch(void);
@@ -123,6 +140,9 @@ int get_and_update_info_page(unsigned char *info_page_buf, size_t info_page_buf_
 
 // Update Firmware
 int update_firmware(char *filename, size_t filename_len, bool recovery);
+
+// Result Log
+int generate_result_log(char *filename, size_t filename_len, bool result); 
 
 // Help
 void show_help_information(void);
@@ -378,47 +398,63 @@ RETRIEVE_DATA_FROM_FIRMWARE_EXIT:
  * Function Implementation
  ******************************************/
 
-int get_firmware_information(void)
+//int get_firmware_information(void)
+int get_firmware_information(bool quiet /* Silent Mode */)
 {
 	int err = TP_SUCCESS;
 
-	printf("--------------------------------\r\n");
+	if(quiet == true) // Enable Silent Mode
+	{
+		// Firmware Version
+    	err = send_fw_version_command();
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
 
-	// FW ID
-	err = send_fw_id_command();
-	if(err != TP_SUCCESS)
-		goto GET_FW_INFO_EXIT;
+		err = read_fw_version_data(true /* Enable Silent Mode */);
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
+	}
+	else // Disable Silent Mode
+	{
+		printf("--------------------------------\r\n");
 
-	err = read_fw_id_data();
-	if(err != TP_SUCCESS)
-		goto GET_FW_INFO_EXIT;
+		// FW ID
+		err = send_fw_id_command();
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
 
-	// Firmware Version
-    err = send_fw_version_command();
-	if(err != TP_SUCCESS)
-		goto GET_FW_INFO_EXIT;
+		err = read_fw_id_data();
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
 
-	err = read_fw_version_data();
-	if(err != TP_SUCCESS)
-		goto GET_FW_INFO_EXIT;
+		// Firmware Version
+    	err = send_fw_version_command();
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
 
-	// Test Version
-    err = send_test_version_command();
-	if(err != TP_SUCCESS)
-		goto GET_FW_INFO_EXIT;
+		//err = read_fw_version_data();
+		err = read_fw_version_data(false /* Disable Silent Mode */);
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
 
-    err = read_test_version_data();
-	if(err != TP_SUCCESS)
-		goto GET_FW_INFO_EXIT;
+		// Test Version
+    	err = send_test_version_command();
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
 
-	// Boot Code Version
-    err = send_boot_code_version_command();
-	if(err != TP_SUCCESS)
-		goto GET_FW_INFO_EXIT;
+    	err = read_test_version_data();
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
 
-	err = read_boot_code_version_data();
-	if(err != TP_SUCCESS)
-		goto GET_FW_INFO_EXIT;
+		// Boot Code Version
+    	err = send_boot_code_version_command();
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
+
+		err = read_boot_code_version_data();
+		if(err != TP_SUCCESS)
+			goto GET_FW_INFO_EXIT;
+	}
 
 GET_FW_INFO_EXIT:
 	return err;
@@ -1146,6 +1182,61 @@ UPDATE_FIRMWARE_EXIT:
 }
 
 /*******************************************
+ * Log
+ ******************************************/
+
+int generate_result_log(char *filename, size_t filename_len, bool result)
+{
+	int err = TP_SUCCESS;
+    FILE *fd = NULL;
+
+	if(g_quiet == false) // Disable Silent Mode
+		printf("--------------------------------\r\n");
+
+	// Make Sure Filename Valid
+	if(filename == NULL)
+	{
+		ERROR_PRINTF("%s: Null String of Filename!\r\n", __func__);
+		err = TP_ERR_INVALID_PARAM;
+		goto GENERATE_RESULT_LOG_EXIT;
+	}
+
+	// Make Sure Filename Length Valid
+	if(filename_len == 0)
+	{
+		ERROR_PRINTF("%s: Filename String Length is Zero!\r\n", __func__);
+		err = TP_ERR_INVALID_PARAM;
+		goto GENERATE_RESULT_LOG_EXIT;
+	}
+	
+	// Debug
+	DEBUG_PRINTF("%s: filename=\"%s\", filename_len=%zd, result=%s.\r\n", __func__, filename, filename_len, (result) ? "true" : "false");
+
+    // Remove Old Log File
+    remove(filename);
+
+    // Create a new file
+    fd = fopen(filename, "w");
+    if (fd == NULL)
+	{
+		ERROR_PRINTF("%s: Fail to open log file \"%s\"!\r\n", __func__, filename);
+		err = TP_ERR_FILE_NOT_FOUND;
+		goto GENERATE_RESULT_LOG_EXIT;
+	}
+
+    // Write result to file
+    if (result == true) // Pass
+        fprintf(fd, "PASS\n");
+    else // Fail
+        fprintf(fd, "FAIL\n");
+
+    fclose(fd);
+
+GENERATE_RESULT_LOG_EXIT:
+	return err;
+}
+
+/*******************************************
  * Help
  ******************************************/
 
@@ -1176,6 +1267,17 @@ void show_help_information(void)
 	printf("\n[Re-Calibarion]\r\n");
 	printf("-k.\r\n");
 	printf("Ex: elan_iap -k\r\n");
+
+	// Result Log
+	printf("\n[Result Log File Path]\r\n");
+	printf("-l <result_log_file_path>.\r\n");
+	printf("Ex: elan_iap -l result.txt\r\n");
+	printf("Ex: elan_iap -l /tmp/result.txt\r\n");
+
+	// Silent (Quiet) Mode
+	printf("\n[Silent Mode]\r\n");
+	printf("-q.\r\n");
+	printf("Ex: elan_iap -q\r\n");
 
 	// Debug Information
 	printf("\n[Debug]\r\n");
@@ -1411,6 +1513,41 @@ int process_parameter(int argc, char **argv)
                 DEBUG_PRINTF("%s: Re-Calibration: %s.\r\n", __func__, (g_rek) ? "Enable" : "Disable");
                 break;
 
+            case 'l': /* Log Filename */
+
+                 // Check if filename is valid
+                file_path_len = strlen(optarg);
+                if ((file_path_len == 0) || (file_path_len > FILE_NAME_LENGTH_MAX))
+                {
+                    ERROR_PRINTF("%s: Log Path (%s) Invalid!\r\n", __func__, optarg);
+                    err = TP_ERR_INVALID_PARAM;
+                    goto PROCESS_PARAM_EXIT;
+                }
+
+				// Check if file path is valid
+				strcpy(file_path, optarg);
+				if(strncmp(file_path, "", strlen(file_path)) == 0)
+				{
+                    ERROR_PRINTF("%s: NULL Log Path!\r\n", __func__);
+                    err = TP_ERR_INVALID_PARAM;
+                    goto PROCESS_PARAM_EXIT;
+                }
+
+                // Set log filename
+                strncpy(g_log_file, optarg, file_path_len);
+                DEBUG_PRINTF("%s: Log Filename: \"%s\".\r\n", __func__, g_log_file);
+
+                // Remove Content of Output Data File
+                remove(g_log_file);
+                break;
+
+			case 'q': /* Silent Mode (Quiet) */
+
+                // Enable Silent Mode (Quiet)
+                g_quiet = true;
+                DEBUG_PRINTF("%s: Silent Mode: %s.\r\n", __func__, (g_quiet) ? "Enable" : "Disable");
+                break;
+
             case 'd': /* Debug Option */
 
                 // Set debug
@@ -1431,11 +1568,24 @@ int process_parameter(int argc, char **argv)
         }
     }
 
-	// Check if Log filename is not null
+	// Check if PID is not null
 	if(g_pid == 0)
 	{
 		DEBUG_PRINTF("%s: PID is not set, look for an appropriate PID...\r\n", __func__);
 	}
+
+	// Check if log filename is not null
+    if (strcmp(g_log_file, "") == 0)
+    {
+        DEBUG_PRINTF("%s: Log filename is not set, set as \"%s\".\r\n", __func__, DEFAULT_LOG_FILENAME);
+
+        // Set log filename
+        strncpy(g_log_file, DEFAULT_LOG_FILENAME, sizeof(DEFAULT_LOG_FILENAME));
+        DEBUG_PRINTF("%s: Default Log Filename: \"%s\".\r\n", __func__, g_log_file);
+
+        // Remove Content of Output Data File
+        remove(g_log_file);
+    }
 
     return TP_SUCCESS;
 
@@ -1454,12 +1604,13 @@ int main(int argc, char **argv)
 	unsigned char hello_packet = 0;
 	bool recovery = false; // Recovery Mode
 
-    printf("i2chid_iap v%s.\r\n", ELAN_TOOL_SW_VERSION);
-
 	// Process Parameter
 	err = process_parameter(argc, argv);
     if (err != TP_SUCCESS)
         goto EXIT;
+
+	if(g_quiet == false) // Disable Silent Mode
+		printf("i2chid_iap v%s.\r\n", ELAN_TOOL_SW_VERSION);
 
 	/* Show Help Information */
 	if(g_help == true)
@@ -1505,7 +1656,7 @@ int main(int argc, char **argv)
 	if((g_get_fw_info == true) && (g_update_fw == false))
 	{
     	DEBUG_PRINTF("Get FW Info.\r\n");
-		err = get_firmware_information();
+		err = get_firmware_information(g_quiet /* Slient Mode */);
 		if(err != TP_SUCCESS)
 		{
         	ERROR_PRINTF("Fail to Get FW Info!\r\n");
@@ -1532,7 +1683,7 @@ int main(int argc, char **argv)
 		{
 			// Get FW Info.
 			DEBUG_PRINTF("Get FW Info.\r\n");
-			err = get_firmware_information();
+			err = get_firmware_information(false /* Disable Silent Mode */);
 			if(err != TP_SUCCESS)
 			{
         		ERROR_PRINTF("Fail to Get FW Info!\r\n");
@@ -1560,7 +1711,7 @@ int main(int argc, char **argv)
 
 		// Get FW Info.
 		DEBUG_PRINTF("Get FW Info.\r\n");
-		err = get_firmware_information();
+		err = get_firmware_information(false /* Disable Silent Mode */);
 		if(err != TP_SUCCESS)
 		{
         	ERROR_PRINTF("Fail to Get FW Info!\r\n");
@@ -1579,8 +1730,17 @@ EXIT1:
     resource_free();
 
 EXIT:
-	// End of Output Stream
-    printf("\r\n");
+	// Log Result
+	if(err == TP_SUCCESS)
+		generate_result_log(g_log_file, sizeof(g_log_file), true /* PASS */);
+	else
+		generate_result_log(g_log_file, sizeof(g_log_file), false /* FAIL */);
+
+	if(g_quiet == false) // Disable Silent Mode
+	{
+		// End of Output Stream
+    	printf("\r\n");
+	}
 
     return err;
 }
