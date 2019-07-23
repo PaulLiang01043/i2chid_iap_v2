@@ -26,12 +26,12 @@
 
 // const char LOG_DIR[] = ".";
 #ifndef DEFAULT_DEBUG_LOG_DIR
-#define DEFAULT_DEBUG_LOG_DIR	"."
+#define DEFAULT_DEBUG_LOG_DIR	"/tmp"
 #endif //DEFAULT_DEBUG_LOG_FILE
 
 //const char LOG_FILE[] = "log.txt";
 #ifndef DEFAULT_DEBUG_LOG_FILE
-#define DEFAULT_DEBUG_LOG_FILE	"log.txt"
+#define DEFAULT_DEBUG_LOG_FILE	"elan_i2chid_iap_log.txt"
 #endif // DEFAULT_DEBUG_LOG_FILE
 
 //const char PRODUCTIONTESTDATA_LOG[]		= "ProductionTestData.csv";

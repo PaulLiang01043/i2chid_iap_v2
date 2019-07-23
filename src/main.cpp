@@ -26,7 +26,7 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"2.4"
+#define	ELAN_TOOL_SW_VERSION 	"2.5"
 #endif //ELAN_TOOL_SW_VERSION
 
 // File Length
@@ -45,7 +45,7 @@
 #endif //FILE_NAME_LENGTH_MAX
 
 #ifndef DEFAULT_LOG_FILENAME
-#define DEFAULT_LOG_FILENAME	"result.txt"
+#define DEFAULT_LOG_FILENAME	"/tmp/elan_i2chid_iap_result.txt"
 #endif //DEFAULT_LOG_FILENAME
 
 /*******************************************
@@ -398,7 +398,6 @@ RETRIEVE_DATA_FROM_FIRMWARE_EXIT:
  * Function Implementation
  ******************************************/
 
-//int get_firmware_information(void)
 int get_firmware_information(bool quiet /* Silent Mode */)
 {
 	int err = TP_SUCCESS;
