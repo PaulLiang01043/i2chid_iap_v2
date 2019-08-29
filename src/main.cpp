@@ -26,7 +26,7 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"2.5"
+#define	ELAN_TOOL_SW_VERSION 	"2.8"
 #endif //ELAN_TOOL_SW_VERSION
 
 // File Length
@@ -44,9 +44,11 @@
 #define FILE_NAME_LENGTH_MAX	128
 #endif //FILE_NAME_LENGTH_MAX
 
+#ifdef __SUPPORT_RESULT_LOG__
 #ifndef DEFAULT_LOG_FILENAME
 #define DEFAULT_LOG_FILENAME	"/tmp/elan_i2chid_iap_result.txt"
 #endif //DEFAULT_LOG_FILENAME
+#endif //__SUPPORT_RESULT_LOG__
 
 /*******************************************
  * Global Variables Declaration
@@ -83,8 +85,10 @@ bool g_get_fw_info = false;
 // Re-Calibration (Re-K)
 bool g_rek = false;
 
+#ifdef __SUPPORT_RESULT_LOG__
 // Result Log
 char g_log_file[FILE_NAME_LENGTH_MAX] = {0};
+#endif //__SUPPORT_RESULT_LOG__
 
 // Silent Mode (Quiet)
 bool g_quiet = false;
@@ -93,7 +97,11 @@ bool g_quiet = false;
 bool g_help = false;
 
 // Parameter Option Settings
+#ifdef __SUPPORT_RESULT_LOG__
 const char* const short_options = "p:P:f:oikl:qdh";
+#else
+const char* const short_options = "p:P:f:oikqdh";
+#endif //__SUPPORT_RESULT_LOG__
 const struct option long_options[] =
 {
 	{ "pid",					1, NULL, 'p'},
@@ -101,7 +109,9 @@ const struct option long_options[] =
 	{ "file_path",				1, NULL, 'f'},
 	{ "firmware_information",	0, NULL, 'i'},
 	{ "calibration",			0, NULL, 'k'},
+#ifdef __SUPPORT_RESULT_LOG__
 	{ "log_filename",			1, NULL, 'l'},
+#endif //__SUPPORT_RESULT_LOG__
 	{ "quiet",					0, NULL, 'q'},
     { "debug",					0, NULL, 'd'},
 	{ "help",					0, NULL, 'h'},
@@ -141,8 +151,10 @@ int get_and_update_info_page(unsigned char *info_page_buf, size_t info_page_buf_
 // Update Firmware
 int update_firmware(char *filename, size_t filename_len, bool recovery);
 
+#ifdef __SUPPORT_RESULT_LOG__
 // Result Log
 int generate_result_log(char *filename, size_t filename_len, bool result); 
+#endif //__SUPPORT_RESULT_LOG__
 
 // Help
 void show_help_information(void);
@@ -1061,6 +1073,7 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 		block_page_num = 0;
 	unsigned char info_page_buf[ELAN_FIRMWARE_PAGE_SIZE] = {0},
 				  page_block_buf[ELAN_FIRMWARE_PAGE_SIZE * 30] = {0};
+    bool bDisableOutputBufferDebug = false;
 
 	// Make Sure Filename Valid
 	if(filename == NULL)
@@ -1117,6 +1130,14 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 	// 
 	// Update with FW Pages 
 	//
+
+    if((g_bEnableOutputBufferDebug == true) && (g_debug == false))
+    {
+        // Disable Output Buffer Debug
+        DEBUG_PRINTF("Disable Output Buffer Debug.\r\n");
+        g_bEnableOutputBufferDebug = false;
+        bDisableOutputBufferDebug = true;
+    }
 
 	if(recovery == false) // Normal Mode
 	{
@@ -1177,6 +1198,14 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 	err = TP_SUCCESS;
 
 UPDATE_FIRMWARE_EXIT:
+    
+    if(bDisableOutputBufferDebug == true)
+    {
+        // Re-Enable Output Buffer Debug
+        DEBUG_PRINTF("Re-Enable Output Buffer Debug.\r\n");
+        g_bEnableOutputBufferDebug = true;
+    }
+
 	return err;
 }
 
@@ -1184,6 +1213,7 @@ UPDATE_FIRMWARE_EXIT:
  * Log
  ******************************************/
 
+#ifdef __SUPPORT_RESULT_LOG__
 int generate_result_log(char *filename, size_t filename_len, bool result)
 {
 	int err = TP_SUCCESS;
@@ -1234,6 +1264,7 @@ int generate_result_log(char *filename, size_t filename_len, bool result)
 GENERATE_RESULT_LOG_EXIT:
 	return err;
 }
+#endif //__SUPPORT_RESULT_LOG__
 
 /*******************************************
  * Help
@@ -1267,11 +1298,13 @@ void show_help_information(void)
 	printf("-k.\r\n");
 	printf("Ex: elan_iap -k\r\n");
 
+#ifdef __SUPPORT_RESULT_LOG__
 	// Result Log
 	printf("\n[Result Log File Path]\r\n");
 	printf("-l <result_log_file_path>.\r\n");
 	printf("Ex: elan_iap -l result.txt\r\n");
 	printf("Ex: elan_iap -l /tmp/result.txt\r\n");
+#endif //__SUPPORT_RESULT_LOG__
 
 	// Silent (Quiet) Mode
 	printf("\n[Silent Mode]\r\n");
@@ -1512,6 +1545,7 @@ int process_parameter(int argc, char **argv)
                 DEBUG_PRINTF("%s: Re-Calibration: %s.\r\n", __func__, (g_rek) ? "Enable" : "Disable");
                 break;
 
+#ifdef __SUPPORT_RESULT_LOG__
             case 'l': /* Log Filename */
 
                  // Check if filename is valid
@@ -1539,6 +1573,7 @@ int process_parameter(int argc, char **argv)
                 // Remove Content of Output Data File
                 remove(g_log_file);
                 break;
+#endif //__SUPPORT_RESULT_LOG__
 
 			case 'q': /* Silent Mode (Quiet) */
 
@@ -1549,7 +1584,7 @@ int process_parameter(int argc, char **argv)
 
             case 'd': /* Debug Option */
 
-                // Set debug
+                // Enable Debug & Output Buffer Debug
                 g_debug = true;
                 DEBUG_PRINTF("Debug: %s.\r\n", (g_debug) ? "Enable" : "Disable");
                 break;
@@ -1573,6 +1608,7 @@ int process_parameter(int argc, char **argv)
 		DEBUG_PRINTF("%s: PID is not set, look for an appropriate PID...\r\n", __func__);
 	}
 
+#ifdef __SUPPORT_RESULT_LOG__
 	// Check if log filename is not null
     if (strcmp(g_log_file, "") == 0)
     {
@@ -1585,6 +1621,7 @@ int process_parameter(int argc, char **argv)
         // Remove Content of Output Data File
         remove(g_log_file);
     }
+#endif //__SUPPORT_RESULT_LOG__
 
     return TP_SUCCESS;
 
@@ -1729,11 +1766,13 @@ EXIT1:
     resource_free();
 
 EXIT:
+#ifdef __SUPPORT_RESULT_LOG__
 	// Log Result
 	if(err == TP_SUCCESS)
 		generate_result_log(g_log_file, sizeof(g_log_file), true /* PASS */);
 	else
 		generate_result_log(g_log_file, sizeof(g_log_file), false /* FAIL */);
+#endif //__SUPPORT_RESULT_LOG__
 
 	if(g_quiet == false) // Disable Silent Mode
 	{

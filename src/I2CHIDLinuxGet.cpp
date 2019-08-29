@@ -214,7 +214,7 @@ int CI2CHIDLinuxGet::WriteRawBytes(unsigned char* pszBuf, int nLen, int nTimeout
     memcpy(m_outBuf, pszBuf, ((unsigned)nLen <= m_outBufSize) ? nLen : m_outBufSize);
 
 #ifdef __ENABLE_DEBUG__
-    if (g_bEnableDebug)
+    if ((g_bEnableDebug == true) && (g_bEnableOutputBufferDebug == true))
         DebugPrintBuffer("m_outBuf", m_outBuf, nLen);
 #endif //__ENABLE_DEBUG__
 
@@ -226,12 +226,12 @@ int CI2CHIDLinuxGet::WriteRawBytes(unsigned char* pszBuf, int nLen, int nTimeout
         nResult = write(m_nHidrawFd, m_outBuf, m_outBufSize);
         if (nResult < 0)
         {
-            DBG("%s: Fail to write data! errno=%d.", __func__, nResult);
+            ERR("%s: Fail to write data! errno=%d.", __func__, nResult);
             nRet = TP_ERR_IO_ERROR;
         }
         else if ((unsigned)nResult != m_outBufSize)
         {
-            DBG("%s: Fail to write data! (write_bytes=%d, data_total=%d)", __func__, nResult, m_outBufSize);
+            ERR("%s: Fail to write data! (write_bytes=%d, data_total=%d)", __func__, nResult, m_outBufSize);
             nRet = TP_ERR_IO_ERROR;
         }
         else // Write len bytes of data
@@ -388,7 +388,7 @@ int CI2CHIDLinuxGet::ReadGhostRawBytes(unsigned char* pszBuf, int nLen, int nTim
     }
     else if (nError == 0)
     {
-        ERR("%s: timeout (%d ms)!", __func__, nTimeout);
+        DBG("%s: timeout (%d ms)!", __func__, nTimeout);
         nRet = TP_ERR_TIMEOUT; // Timeout error
         goto READ_RAW_BYTES_EXIT;
     }
@@ -694,9 +694,9 @@ int CI2CHIDLinuxGet::FindHidrawDevice(int nVID, int nPID, char *pszDevicePath)
         if (nError >= 0)
         {
             DBG("--------------------------------");
-            DBG("\tbustype: 0x%02x (%s)", info.bustype, bus_str(info.bustype));
-            DBG("\tvendor: 0x%04hx", info.vendor);
-            DBG("\tproduct: 0x%04hx", info.product);
+            DBG("  bustype: 0x%02x (%s)", info.bustype, bus_str(info.bustype));
+            DBG("  vendor: 0x%04hx", info.vendor);
+            DBG("  product: 0x%04hx", info.product);
 
             // Force touch device to connect if bustype=0x03(BUS_I2C), VID=0x4f3, and PID=0x0
             if ((info.bustype == BUS_I2C) && 

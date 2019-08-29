@@ -15,6 +15,8 @@
 #ifdef __linux__
 #include <sys/time.h> // struct timeval & gettimeofday()
 #include <semaphore.h>	/* semaphore */
+#include <syslog.h>     /* syslog */
+
 #else // _WIN32
 #include <sys_win32/time.h> // struct timeval & gettimeofday()
 #include <windows.h> /* CRITICAL_SECTION */
@@ -24,6 +26,15 @@
 // Definitions
 //////////////////////////////////////////////////////////////////////
 
+#ifndef __ENABLE_SYSLOG_DEBUG__
+#define __ENABLE_SYSLOG_DEBUG__
+#endif //__ENABLE_SYSLOG_DEBUG__
+
+#if 0 //ndef __ENABLE_LOG_FILE_DEBUG__
+#define __ENABLE_LOG_FILE_DEBUG__
+#endif //__ENABLE_LOG_FILE_DEBUG__
+
+#ifdef __ENABLE_SYSLOG_DEBUG__
 // const char LOG_DIR[] = ".";
 #ifndef DEFAULT_DEBUG_LOG_DIR
 #define DEFAULT_DEBUG_LOG_DIR	"/tmp"
@@ -38,6 +49,7 @@
 #ifndef DEFAULT_TEST_RESULT_LOG_FILE
 #define DEFAULT_TEST_RESULT_LOG_FILE	"ProductionTestData.csv"
 #endif // DEFAULT_TEST_RESULT_LOG_FILE
+#endif //__ENABLE_SYSLOG_DEBUG__
 
 //const int LOG_BUF_SIZE = 1280;
 #ifndef LOG_BUF_SIZE
@@ -53,6 +65,7 @@
 //////////////////////////////////////////////////////////////////////
 
 extern bool g_bEnableDebug;
+extern bool g_bEnableOutputBufferDebug;
 extern bool g_bEnableErrorMsg;
 
 //////////////////////////////////////////////////////////////////////
@@ -66,14 +79,14 @@ extern bool g_bEnableErrorMsg;
 #define ERROR(format, args...) \
 do{\
    printf("[ERROR] " format "\r\n", ##args); \
-   if(g_bEnableDebug) \
+   if(g_bEnableErrorMsg) \
       ErrorLogFormat(format, ##args); \
 }while(0)
 
 #define ERR(format, args...) \
 do{\
    printf("[ERR] " format "\r\n", ##args); \
-   if(g_bEnableDebug) \
+   if(g_bEnableErrorMsg) \
       ErrorLogFormat(format, ##args); \
 }while(0)
 
@@ -91,7 +104,7 @@ do{\
 #define ERROR(format, ...) \
 do{\
    printf("[ERROR] "format"\r\n", __VA_ARGS__); \
-   if(g_bEnableDebug) \
+   if(g_bEnableErrorMsg) \
       ErrorLogFormat(format, __VA_ARGS__); \
 }while(0)
 */
@@ -99,7 +112,7 @@ do{\
 #define ERR(format, ...) \
 do{\
    printf("[ERROR] " format "\r\n", __VA_ARGS__); \
-   if(g_bEnableDebug) \
+   if(g_bEnableErrorMsg) \
       ErrorLogFormat(format, __VA_ARGS__); \
 }while(0)
 
@@ -121,6 +134,7 @@ public:
     // Constructor / Deconstructor
     //CBaseLog(void);
     CBaseLog(char *pszLogDirPath = (char *)DEFAULT_DEBUG_LOG_DIR, char *pszDebugLogFileName = (char *)DEFAULT_DEBUG_LOG_FILE);
+
     ~CBaseLog(void);
 
     // Log Functions
@@ -131,6 +145,7 @@ public:
     void DebugPrintBuffer(unsigned char *pbyBuf, int nLen);
     void DebugPrintBuffer(const char *pszBufName, unsigned char *pbyBuf, int nLen);
 
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     // File Operation
     int CleanFileContentWithPath(const char *pszFilePath);
     int CopyFileA(const char *pszSrcFilePath, char *pszDestFilePath);
@@ -155,8 +170,6 @@ public:
     struct timeval m_tvCurTime;
     char m_szDateBuffer[80];
     char m_szDateTimeBuffer[88];
-    char m_szLogBuf[LOG_BUF_SIZE];
-    char m_szDebugBuf[LOG_BUF_SIZE];
 
     // Debug Log
     char m_szLogDirPath[PATH_LEN_MAX];
@@ -166,6 +179,11 @@ public:
     // Test Result log
     char m_szTestResultLogFileName[PATH_LEN_MAX];
     char m_szTestResultLogFilePath[PATH_LEN_MAX];
+#endif //__ENABLE_LOG_FILE_DEBUG__
+
+    // Data Member
+    char m_szLogBuf[LOG_BUF_SIZE];
+    char m_szDebugBuf[LOG_BUF_SIZE];
 
 protected:
 #ifdef __linux__

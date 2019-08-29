@@ -102,6 +102,11 @@
 #define ERR_EEPROM_WRITE_FAILURE			0x0601
 #endif
 
+/* System Command Fail */
+#ifndef ERR_IN_RECOVERY_MODE
+#define ERR_IN_RECOVERY_MODE				0x0702
+#endif //ERR_IN_RECOVERY_MODE
+
 /** Error information check, use GetErrMsg to get the error message. **/
 #ifndef TP_ERR_CHK_MSG
 #define TP_ERR_CHK_MSG						0xFFFF

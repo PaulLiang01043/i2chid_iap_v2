@@ -31,6 +31,7 @@
 //////////////////////////////////////////////////////////////////////
 
 bool g_bEnableDebug = true;
+bool g_bEnableOutputBufferDebug = true;
 bool g_bEnableErrorMsg = true;
 
 //////////////////////////////////////////////////////////////////////
@@ -39,18 +40,24 @@ bool g_bEnableErrorMsg = true;
 
 CBaseLog::CBaseLog(char *pszLogDirPath, char *pszDebugLogFileName)
 {
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     struct stat file_stat;
     //printf("%s: pszLogDirPath=\"%s\", pszDebugLogFileName=\"%s\".\r\n", __func__, pszLogDirPath, pszDebugLogFileName);
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
     memset(m_szLogBuf, 0, sizeof(m_szLogBuf));
+    memset(m_szDebugBuf, 0, sizeof(m_szDebugBuf));
+
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     memset(m_szDateBuffer, 0, sizeof(m_szDateBuffer));
     memset(m_szDateTimeBuffer, 0, sizeof(m_szDateTimeBuffer));
-    memset(m_szDebugBuf, 0, sizeof(m_szDebugBuf));
+
     memset(m_szLogDirPath, 0, sizeof(m_szLogDirPath));
     memset(m_szDebugLogFileName, 0, sizeof(m_szDebugLogFileName));
     memset(m_szDebugLogFilePath, 0, sizeof(m_szDebugLogFilePath));
     memset(m_szTestResultLogFileName, 0, sizeof(m_szTestResultLogFileName));
     memset(m_szTestResultLogFilePath, 0, sizeof(m_szTestResultLogFilePath));
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
     // Initialize mutex
 #ifdef __linux__
@@ -60,6 +67,12 @@ CBaseLog::CBaseLog(char *pszLogDirPath, char *pszDebugLogFileName)
 #endif // __linux__
     m_nFileIoLockCounter = 0;
 
+#if defined(__linux__) && defined(__ENABLE_SYSLOG_DEBUG__)
+    // syslog
+    openlog("elan_i2chid_debug", LOG_CONS | LOG_NDELAY | LOG_PID, LOG_USER);
+#endif //defined(__linux__) && defined(__ENABLE_SYSLOG_DEBUG__)
+
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     // Initialize Debug Directory Path
     if (pszLogDirPath != NULL)
         SetLogDirPath(pszLogDirPath);
@@ -112,10 +125,16 @@ CBaseLog::CBaseLog(char *pszLogDirPath, char *pszDebugLogFileName)
     // Clear Content of Debug Log File
     if (stat(m_szTestResultLogFilePath, &file_stat) == 0)
         remove(m_szTestResultLogFilePath);
+#endif //__ENABLE_LOG_FILE_DEBUG__
 }
 
 CBaseLog::~CBaseLog(void)
 {
+#if defined(__linux__) && defined(__ENABLE_SYSLOG_DEBUG__)
+    // syslog
+    closelog();
+#endif //defined(__linux__) && defined(__ENABLE_SYSLOG_DEBUG__)
+
     // Destroy mutex (semaphore)
     //DBG("Destroy mutext/semaphore (address=%p).", &m_semFileIoMutex);
 #ifdef __linux__
@@ -129,6 +148,7 @@ CBaseLog::~CBaseLog(void)
 // Function Implementation
 //////////////////////////////////////////////////////////////////////
 
+#ifdef __ENABLE_LOG_FILE_DEBUG__
 int CBaseLog::GetDirPath(char *pszFullPath, char *pszDirPath)
 {
     int nRet = TP_SUCCESS,
@@ -835,11 +855,13 @@ int CBaseLog::GetTestResultLogFilePath(char *pszFilePathBuffer)
 
     return TP_SUCCESS;
 }
-
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
 void CBaseLog::DebugLog(char *pszLog)
 {
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     FILE *fd = NULL;
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
     // Make Sure Log String Valid
     if (pszLog == NULL)
@@ -856,6 +878,11 @@ void CBaseLog::DebugLog(char *pszLog)
 #endif //__linux
     m_nFileIoLockCounter++;
 
+#ifdef __ENABLE_SYSLOG_DEBUG__
+    syslog(LOG_DEBUG, "%s\n", pszLog);
+#endif //__ENABLE_SYSLOG_DEBUG__
+
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
 	{
@@ -879,6 +906,7 @@ void CBaseLog::DebugLog(char *pszLog)
     fclose(fd);
 
 DEBUG_LOG_EXIT_1:
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
     // Mutex unlocks the critical section
 #ifdef __linux__
@@ -894,7 +922,9 @@ DEBUG_LOG_EXIT:
 
 void CBaseLog::DebugLogFormat(const char *pszFormat, ...)
 {
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     FILE *fd = NULL;
+#endif //__ENABLE_LOG_FILE_DEBUG__
     char szLogBuffer[LOG_BUF_SIZE] = {0};
     va_list pArgs;
 
@@ -913,6 +943,16 @@ void CBaseLog::DebugLogFormat(const char *pszFormat, ...)
 #endif //__linux
     m_nFileIoLockCounter++;
 
+#ifdef __ENABLE_SYSLOG_DEBUG__
+    // Load String to LogBuffer with Variable Argument List
+    va_start(pArgs, pszFormat);
+    vsnprintf(szLogBuffer, sizeof(szLogBuffer), pszFormat, pArgs);
+    va_end(pArgs);
+
+    syslog(LOG_DEBUG, "%s\n", szLogBuffer);
+#endif //__ENABLE_SYSLOG_DEBUG__
+
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     // Make Sure Log File Exist
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
@@ -942,6 +982,7 @@ void CBaseLog::DebugLogFormat(const char *pszFormat, ...)
     fclose(fd);
 
 DEBUG_LOG_FORMAT_EXIT_1:
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
     // Mutex unlocks the critical section
 #ifdef __linux__
@@ -957,7 +998,9 @@ DEBUG_LOG_FORMAT_EXIT:
 
 void CBaseLog::ErrorLog(char *pszLog)
 {
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     FILE *fd = NULL;
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
     // Make Sure Log String Valid
     if (pszLog == NULL)
@@ -974,6 +1017,11 @@ void CBaseLog::ErrorLog(char *pszLog)
 #endif //__linux
     m_nFileIoLockCounter++;
 
+#ifdef __ENABLE_SYSLOG_DEBUG__
+    syslog(LOG_ERR, "%s\n", pszLog);
+#endif //__ENABLE_SYSLOG_DEBUG__
+
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
 	{
@@ -997,6 +1045,7 @@ void CBaseLog::ErrorLog(char *pszLog)
     fclose(fd);
 
 ERROR_LOG_EXIT_1:
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
     // Mutex unlocks the critical section
 #ifdef __linux__
@@ -1012,7 +1061,9 @@ ERROR_LOG_EXIT:
 
 void CBaseLog::ErrorLogFormat(const char *pszFormat, ...)
 {
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     FILE *fd = NULL;
+#endif //__ENABLE_SYSLOG_DEBUG__
     char szLogBuffer[LOG_BUF_SIZE] = {0};
     va_list pArgs;
 
@@ -1031,6 +1082,16 @@ void CBaseLog::ErrorLogFormat(const char *pszFormat, ...)
 #endif //__linux
     m_nFileIoLockCounter++;
 
+#ifdef __ENABLE_SYSLOG_DEBUG__
+    // Load String to LogBuffer with Variable Argument List
+    va_start(pArgs, pszFormat);
+    vsnprintf(szLogBuffer, sizeof(szLogBuffer), pszFormat, pArgs);
+    va_end(pArgs);
+
+    syslog(LOG_ERR, "%s\n", szLogBuffer);
+#endif //__ENABLE_SYSLOG_DEBUG__
+
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
 	{
@@ -1059,6 +1120,7 @@ void CBaseLog::ErrorLogFormat(const char *pszFormat, ...)
     fclose(fd);
 
 ERROR_LOG_FORMAT_EXIT_1:
+#endif //__ENABLE_SYSLOG_DEBUG__
 
     // Mutex unlocks the critical section
 #ifdef __linux__
@@ -1074,10 +1136,12 @@ ERROR_LOG_FORMAT_EXIT:
 
 void CBaseLog::DebugPrintBuffer(unsigned char *pbyBuf, int nLen)
 {
+#ifdef __ENABLE_LOG_FILE_DEBUG__
+    FILE *fd = NULL;
+#endif //__ENABLE_LOG_FILE_DEBUG__
     int nIndex = 0;
     unsigned char *pbyData = NULL;
     char szBuffer[8] = { 0 };
-    FILE *fd = NULL;
 
     if (pbyBuf == NULL)
     {
@@ -1096,6 +1160,20 @@ void CBaseLog::DebugPrintBuffer(unsigned char *pbyBuf, int nLen)
 #endif //__linux
     m_nFileIoLockCounter++;
 
+#ifdef __ENABLE_SYSLOG_DEBUG__
+    // Set data to buffer
+    memset(m_szDebugBuf, 0, sizeof(m_szDebugBuf));
+    for (nIndex = 0, pbyData = pbyBuf; nIndex < nLen; nIndex++, pbyData++)
+    {
+        memset(szBuffer, 0, sizeof(szBuffer));
+        sprintf(szBuffer, " %02x", *pbyData);
+        strcat(m_szDebugBuf, szBuffer);
+    }
+
+    syslog(LOG_DEBUG, "buffer[%d]=%s.\n", nIndex, m_szDebugBuf);
+#endif //__ENABLE_SYSLOG_DEBUG__
+
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
     {
@@ -1128,6 +1206,7 @@ void CBaseLog::DebugPrintBuffer(unsigned char *pbyBuf, int nLen)
     fclose(fd);
 
 DEBUG_PRINT_BUFFER_EXIT_1:
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
     // Mutex unlocks the critical section
 #ifdef __linux__
@@ -1143,10 +1222,12 @@ DEBUG_PRINT_BUFFER_EXIT:
 
 void CBaseLog::DebugPrintBuffer(const char *pszBufName, unsigned char *pbyBuf, int nLen)
 {
+#ifdef __ENABLE_LOG_FILE_DEBUG__
+    FILE *fd = NULL;
+#endif //__ENABLE_LOG_FILE_DEBUG__
     int nIndex = 0;
     unsigned char *pbyData = NULL;
     char szBuffer[8] = { 0 };
-    FILE *fd = NULL;
 
     if ((!pszBufName) || (!pbyBuf))
     {
@@ -1165,6 +1246,20 @@ void CBaseLog::DebugPrintBuffer(const char *pszBufName, unsigned char *pbyBuf, i
 #endif //__linux
     m_nFileIoLockCounter++;
 
+#ifdef __ENABLE_SYSLOG_DEBUG__
+    // Set data to buffer
+    memset(m_szDebugBuf, 0, sizeof(m_szDebugBuf));
+    for (nIndex = 0, pbyData = pbyBuf; nIndex < nLen; nIndex++, pbyData++)
+    {
+        memset(szBuffer, 0, sizeof(szBuffer));
+        sprintf(szBuffer, " %02x", *pbyData);
+        strcat(m_szDebugBuf, szBuffer);
+    }
+
+    syslog(LOG_DEBUG, "%s[%d]=%s.\n", pszBufName, nIndex, m_szDebugBuf);
+#endif //__ENABLE_SYSLOG_DEBUG__
+
+#ifdef __ENABLE_LOG_FILE_DEBUG__
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
     {
@@ -1197,6 +1292,7 @@ void CBaseLog::DebugPrintBuffer(const char *pszBufName, unsigned char *pbyBuf, i
     fclose(fd);
 
 DEBUG_PRINT_BUFFER_2_EXIT_1:
+#endif //__ENABLE_LOG_FILE_DEBUG__
 
     // Mutex unlocks the critical section
 #ifdef __linux__
