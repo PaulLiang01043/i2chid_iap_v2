@@ -7,15 +7,20 @@ objects := BaseLog.o \
 		   I2CHIDLinuxGet.o \
 		   ElanTsFuncUtility.o \
 		   main.o
-libraries := rt pthread
+libraries := stdc++ rt pthread
 executable_path := ./bin
 source_path := ./src
 include_path := ./include 
 
-CC = g++ # Compiler: GCC C++ Compiler
-CFLAGS = -Wall -ansi -O3 -g
-CFLAGS += -D__ENABLE_DEBUG__
-CFLAGS += -static
+CXX ?= g++ # Compiler: GCC C++ Compiler
+#CXX ?= arm-none-linux-gnueabi-g++ # Compiler: arm cross compiler
+CXXFLAGS = -Wall -ansi -O3 -g
+CXXFLAGS += -D__ENABLE_DEBUG__
+CXXFLAGS += -D__ENABLE_OUTBUF_DEBUG__
+CXXFLAGS += -D__ENABLE_INBUF_DEBUG__
+CXXFLAGS += -D__ENABLE_LOG_FILE_DEBUG__
+#CXXFLAGS += -D__ENABLE_SYSLOG_DEBUG__
+CXXFLAGS += -static
 INC_FLAGS += $(addprefix -I, $(include_path))
 LIB_FLAGS += $(addprefix -l, $(libraries))
 VPATH = $(include_path)
@@ -26,13 +31,13 @@ vpath %.cpp $(source_path)
 
 .PHONY: all
 all: $(objects)
-	$(CC) $^ $(CFLAGS) $(INC_FLAGS) $(LIB_FLAGS) -o $(program)
+	$(CXX) $^ $(CXXFLAGS) $(INC_FLAGS) $(LIB_FLAGS) -o $(program)
 	@chmod 777 $(program)
 	@mv $(program) $(executable_path)
 	@rm -rf $^
 	
 %.o: %.cpp
-	$(CC) -c $< $(CFLAGS) $(INC_FLAGS) $(LIB_FLAGS)
+	$(CXX) -c $< $(CXXFLAGS) $(INC_FLAGS) $(LIB_FLAGS)
 	
 .PHONY: clean
 clean: 

@@ -26,7 +26,7 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"2.8"
+#define	ELAN_TOOL_SW_VERSION 	"2.9"
 #endif //ELAN_TOOL_SW_VERSION
 
 // File Length

@@ -213,10 +213,10 @@ int CI2CHIDLinuxGet::WriteRawBytes(unsigned char* pszBuf, int nLen, int nTimeout
     memset(m_outBuf, 0, sizeof(unsigned char)*m_outBufSize);
     memcpy(m_outBuf, pszBuf, ((unsigned)nLen <= m_outBufSize) ? nLen : m_outBufSize);
 
-#ifdef __ENABLE_DEBUG__
+#if defined(__ENABLE_DEBUG__) && defined(__ENABLE_OUTBUF_DEBUG__)
     if ((g_bEnableDebug == true) && (g_bEnableOutputBufferDebug == true))
         DebugPrintBuffer("m_outBuf", m_outBuf, nLen);
-#endif //__ENABLE_DEBUG__
+#endif //__ENABLE_DEBUG__ && __ENABLE_OUTBUF_DEBUG__
 
     // Write Buffer Data to hidraw device
     // Since ELAN i2c-hid FW has its special limit, make sure to send all 33 byte once to IC.
@@ -342,10 +342,10 @@ int CI2CHIDLinuxGet::ReadRawBytes(unsigned char* pszBuf, int nLen, int nTimeout,
 
     //DBG("Successfully read %d bytes of data from device, return %d.", transfer_cnt, ret);
 
-#ifdef __ENABLE_DEBUG__
+#if defined(__ENABLE_DEBUG__) && defined(__ENABLE_INBUF_DEBUG__)
     if (g_bEnableDebug)
         DebugPrintBuffer("m_inBuf", m_inBuf, nLen);
-#endif //__ENABLE_DEBUG__
+#endif //__ENABLE_DEBUG__ && __ENABLE_INBUF_DEBUG__
 
     // Copy inBuf data to input buffer pointer
     memcpy(pszBuf, m_inBuf, ((unsigned)nLen <= m_inBufSize) ? nLen : m_inBufSize);

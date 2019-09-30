@@ -26,32 +26,27 @@
 // Definitions
 //////////////////////////////////////////////////////////////////////
 
-#ifndef __ENABLE_SYSLOG_DEBUG__
-#define __ENABLE_SYSLOG_DEBUG__
-#endif //__ENABLE_SYSLOG_DEBUG__
-
-#if 0 //ndef __ENABLE_LOG_FILE_DEBUG__
-#define __ENABLE_LOG_FILE_DEBUG__
-#endif //__ENABLE_LOG_FILE_DEBUG__
-
-#ifdef __ENABLE_SYSLOG_DEBUG__
+#ifdef __ENABLE_LOG_FILE_DEBUG__
 // const char LOG_DIR[] = ".";
 #ifndef DEFAULT_DEBUG_LOG_DIR
 #define DEFAULT_DEBUG_LOG_DIR	"/tmp"
 #endif //DEFAULT_DEBUG_LOG_FILE
 
-//const char LOG_FILE[] = "log.txt";
 #ifndef DEFAULT_DEBUG_LOG_FILE
 #define DEFAULT_DEBUG_LOG_FILE	"elan_i2chid_iap_log.txt"
 #endif // DEFAULT_DEBUG_LOG_FILE
 
-//const char PRODUCTIONTESTDATA_LOG[]		= "ProductionTestData.csv";
 #ifndef DEFAULT_TEST_RESULT_LOG_FILE
-#define DEFAULT_TEST_RESULT_LOG_FILE	"ProductionTestData.csv"
+#define DEFAULT_TEST_RESULT_LOG_FILE	"elan_i2chid_iap_result.txt"
 #endif // DEFAULT_TEST_RESULT_LOG_FILE
+#endif //__ENABLE_LOG_FILE_DEBUG__
+
+#ifdef __ENABLE_SYSLOG_DEBUG__
+#define DEFAULT_DEBUG_LOG_DIR   ""
+#define DEFAULT_DEBUG_LOG_FILE  ""
+#define DEFAULT_TEST_RESULT_LOG_FILE    ""
 #endif //__ENABLE_SYSLOG_DEBUG__
 
-//const int LOG_BUF_SIZE = 1280;
 #ifndef LOG_BUF_SIZE
 #define LOG_BUF_SIZE 4096
 #endif //LOG_BUF_SIZE
