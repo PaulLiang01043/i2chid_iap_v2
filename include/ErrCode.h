@@ -52,6 +52,11 @@
 #define TP_ERR_IO_ERROR						0x0009
 #endif // TP_ERR_IO_ERROR
 
+/** Value(s) mismatched for some cases **/
+#ifndef TP_ERR_DATA_MISMATCHED
+#define TP_ERR_DATA_MISMATCHED				0x000A
+#endif //TP_ERR_DATA_MISMATCHED
+
 /** Connect Elan Bridge and not get hello packet **/
 #ifndef TP_ERR_CONNECT_NO_HELLO_PACKET
 #define TP_ERR_CONNECT_NO_HELLO_PACKET		0x0102
@@ -62,15 +67,20 @@
 #define TP_ERR_NOT_FOUND_DEVICE				0x0104
 #endif
 
-/** Someting Like File or Directory Not Found  **/
+/** Something Like File or Directory Not Found  **/
 #ifndef TP_ERR_FILE_NOT_FOUND
 #define TP_ERR_FILE_NOT_FOUND				0x0105
+#endif //TP_ERR_FILE_NOT_FOUND
+
+/** Data Not Found  **/
+#ifndef TP_ERR_DATA_NOT_FOUND
+#define TP_ERR_DATA_NOT_FOUND				0x0106
 #endif //TP_ERR_FILE_NOT_FOUND
 
 /* Unknown Device Type */
 #ifndef TP_UNKNOWN_DEVICE_TYPE
 #define TP_UNKNOWN_DEVICE_TYPE				0x010f
-#endif // TP_UNKNOWN_DEVICE_TYP
+#endif // TP_UNKNOWN_DEVICE_TYPE
 
 #ifndef TP_GET_DATA_FAIL
 #define	TP_GET_DATA_FAIL					0x0202
@@ -103,6 +113,10 @@
 #endif
 
 /* System Command Fail */
+#ifndef ERR_SYSTEM_COMMAND_FAIL
+#define ERR_SYSTEM_COMMAND_FAIL				0x0701
+#endif //ERR_SYSTEM_COMMAND_FAIL
+
 #ifndef ERR_IN_RECOVERY_MODE
 #define ERR_IN_RECOVERY_MODE				0x0702
 #endif //ERR_IN_RECOVERY_MODE

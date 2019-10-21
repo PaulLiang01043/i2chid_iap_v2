@@ -26,7 +26,7 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"2.9"
+#define	ELAN_TOOL_SW_VERSION 	"2.b"
 #endif //ELAN_TOOL_SW_VERSION
 
 // File Length
@@ -130,6 +130,19 @@ int retrieve_data_from_firmware(unsigned char *data, int data_size);
 
 // Firmware Information
 int get_firmware_information(bool quiet /* Silent Mode */);
+
+// Boot Code Version
+int get_boot_code_version(unsigned short *p_bc_version);
+
+// FW Version
+int get_fw_version(unsigned short *p_fw_version);
+
+// Read ROM
+int get_rom_data(unsigned short addr, unsigned short *p_data);
+
+// Remark ID
+int get_remark_id_from_firmware(unsigned short *p_remark_id);
+int check_remark_id(void);
 
 // Calibration
 int calibrate_touch(void);
@@ -468,6 +481,169 @@ int get_firmware_information(bool quiet /* Silent Mode */)
 	}
 
 GET_FW_INFO_EXIT:
+	return err;
+}
+
+int get_boot_code_version(unsigned short *p_bc_version)
+{
+	int err = TP_SUCCESS;
+    unsigned short bc_version = 0;
+
+    err = send_boot_code_version_command();
+    if(err != TP_SUCCESS)
+        goto GET_BOOT_CODE_VERSION_EXIT;
+
+    err = get_boot_code_version_data(&bc_version);
+    if(err != TP_SUCCESS)
+        goto GET_BOOT_CODE_VERSION_EXIT;
+
+    *p_bc_version = bc_version;
+    err = TP_SUCCESS;
+
+GET_BOOT_CODE_VERSION_EXIT:
+	return err;
+}
+
+int get_fw_version(unsigned short *p_fw_version)
+{
+	int err = TP_SUCCESS;
+    unsigned short fw_version = 0;
+
+    err = send_fw_version_command();
+    if(err != TP_SUCCESS)
+        goto GET_FW_VERSION_EXIT;
+
+    err = get_fw_version_data(&fw_version);
+    if(err != TP_SUCCESS)
+        goto GET_FW_VERSION_EXIT;
+
+    *p_fw_version = fw_version;
+    err = TP_SUCCESS;
+
+GET_FW_VERSION_EXIT:
+	return err;
+}
+
+int get_rom_data(unsigned short addr, unsigned short *p_data)
+{
+	int err = TP_SUCCESS;
+    unsigned short fw_version = 0,
+                   word_data = 0;
+    unsigned char  solution_id = 0;
+
+	// Check if Parameter Invalid
+    if (p_data == NULL)
+    {
+        ERROR_PRINTF("%s: Invalid Parameter! (p_data=0x%p)\r\n", __func__, p_data);
+        err = TP_ERR_INVALID_PARAM;
+        goto GET_ROM_DATA_EXIT;
+    }
+
+    /* Get Firmware Version */
+    err = get_fw_version(&fw_version);
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("%s: Fail to Get FW Version! errno=0x%x.\r\n", __func__, err);
+        goto GET_ROM_DATA_EXIT;
+    }
+
+    // Get Solution ID
+    solution_id = (unsigned char)((fw_version & 0xFF00) >> 8);
+
+    /* Read Data from ROM */
+    err = send_read_rom_data_command(addr, solution_id);
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("%s: Fail to Send Read ROM Data Command! errno=0x%x.\r\n", __func__, err);
+        goto GET_ROM_DATA_EXIT;
+    }
+
+    err = receive_rom_data(&word_data);
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("%s: Fail to Receive ROM Data! errno=0x%x.\r\n", __func__, err);
+        goto GET_ROM_DATA_EXIT;
+    }
+
+    *p_data = word_data;
+    err = TP_SUCCESS;
+
+GET_ROM_DATA_EXIT:
+	return err; 
+}
+
+int get_remark_id_from_firmware(unsigned short *p_remark_id)
+{
+	int err = TP_SUCCESS,
+        read_byte = 0;
+    unsigned char data[2] = {0};
+    unsigned short remark_id = 0;
+
+	// Check if Parameter Invalid
+    if (p_remark_id == NULL)
+    {
+        ERROR_PRINTF("%s: Invalid Parameter! (p_remark_id=0x%p)\r\n", __func__, p_remark_id);
+        err = TP_ERR_INVALID_PARAM;
+        goto GET_REMARK_ID_FROM_FW_EXIT;
+    }
+
+    // Reposition fd to position '-4' from the end of file.
+    lseek(g_firmware_fd, -4L, SEEK_END);
+
+    // Read Data from File   
+	read_byte = read(g_firmware_fd, data, 2);  // 15 63 XX XX
+	if(read_byte != 2)
+	{
+		ERROR_PRINTF("%s: Fail to get 2 bytes of remark_id from fd %d! (result=%d, errno=%d)\r\n", __func__, g_firmware_fd, err, errno);
+		err = TP_GET_DATA_FAIL;
+        goto GET_REMARK_ID_FROM_FW_EXIT;
+	}
+    
+    // Read FW Remark ID
+	remark_id = data[0] + (data[1] << 8);
+    DEBUG_PRINTF("Remark ID: %04x.\r\n", remark_id);
+
+    *p_remark_id = remark_id;
+    err = TP_SUCCESS;
+
+GET_REMARK_ID_FROM_FW_EXIT:
+	return err;
+}
+
+int check_remark_id(void)
+{
+	int err = TP_SUCCESS;
+	unsigned short remark_id_from_rom = 0,
+                   remark_id_from_fw  = 0;
+
+    // Read Remark ID from ROM
+    err = get_rom_data(ELAN_INFO_ROM_REMARK_ID_MEMORY_ADDR, &remark_id_from_rom);
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("%s: Fail to Get Remark ID from ROM! errno=0x%x.\r\n", __func__, err);
+        goto CHECK_REMARK_ID_EXIT;
+    }
+
+    // Read Remark ID from Firmware
+    err = get_remark_id_from_firmware(&remark_id_from_fw);
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("%s: Fail to Get Remark ID from Firmware! errno=0x%x.\r\n", __func__, err);
+        goto CHECK_REMARK_ID_EXIT;
+    }
+
+    // Validate Remark ID
+    DEBUG_PRINTF("Remark ID from ROM: %04x, Remark ID from FW: %04x.\r\n", remark_id_from_rom, remark_id_from_fw);
+	if(remark_id_from_rom != remark_id_from_fw) 
+	{
+        ERROR_PRINTF("%s: Remark ID Mismatched! (Remark ID from ROM: %04x, Remark ID from FW: %04x)\r\n", __func__, remark_id_from_rom, remark_id_from_fw);
+		err = TP_ERR_DATA_MISMATCHED;
+        goto CHECK_REMARK_ID_EXIT;
+	}
+
+    err = TP_SUCCESS;
+
+CHECK_REMARK_ID_EXIT:
 	return err;
 }
 
@@ -1072,8 +1248,12 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 		block_index = 0,
 		block_page_num = 0;
 	unsigned char info_page_buf[ELAN_FIRMWARE_PAGE_SIZE] = {0},
-				  page_block_buf[ELAN_FIRMWARE_PAGE_SIZE * 30] = {0};
+				  page_block_buf[ELAN_FIRMWARE_PAGE_SIZE * 30] = {0},
+                  iap_version = 0;
+    unsigned short bc_version = 0;
+#if defined(__ENABLE_DEBUG__) && defined(__ENABLE_SYSLOG_DEBUG__)
     bool bDisableOutputBufferDebug = false;
+#endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
 
 	// Make Sure Filename Valid
 	if(filename == NULL)
@@ -1102,6 +1282,14 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 	printf("--------------------------------\r\n");
 	printf("FW Path: \"%s\".\r\n", filename);
 
+    // Get Boot Code Version
+	err = get_boot_code_version(&bc_version);
+	if(err != TP_SUCCESS)
+    {
+		ERROR_PRINTF("%s: Fail to Get BC Version! errno=0x%x.\r\n", __func__, err);
+		goto UPDATE_FIRMWARE_EXIT;
+	}
+
 	if(recovery == false) // Normal Mode
 	{
 		//
@@ -1115,7 +1303,20 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 		}
 	}
 	
-	printf("Start FW Update Process...\r\n");
+    // 
+    // Remark ID Check 
+    //
+	iap_version = (unsigned char)(bc_version & 0x00FF);
+    DEBUG_PRINTF("IAP Version: 0x%02x.\r\n", iap_version);
+	if(iap_version >= 0x60)
+	{
+        err = check_remark_id();
+        if(err != TP_SUCCESS)
+		{
+			ERROR_PRINTF("%s: Remark ID Check Failed! errno=0x%x.\r\n", __func__, err);
+			goto UPDATE_FIRMWARE_EXIT;
+		}
+	}
 
 	//
 	// Switch to Boot Code
@@ -1127,10 +1328,13 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 		goto UPDATE_FIRMWARE_EXIT;
 	}
 
+	printf("Start FW Update Process...\r\n");
+
 	// 
 	// Update with FW Pages 
 	//
 
+#if defined(__ENABLE_DEBUG__) && defined(__ENABLE_SYSLOG_DEBUG__)
     if((g_bEnableOutputBufferDebug == true) && (g_debug == false))
     {
         // Disable Output Buffer Debug
@@ -1138,6 +1342,7 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
         g_bEnableOutputBufferDebug = false;
         bDisableOutputBufferDebug = true;
     }
+#endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
 
 	if(recovery == false) // Normal Mode
 	{
@@ -1150,7 +1355,10 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 			goto UPDATE_FIRMWARE_EXIT;
 		}
 	}
-	
+
+    // Reset file pointer
+    lseek(g_firmware_fd, 0, SEEK_SET); 
+
 	// Write Main Pages
 	page_count = compute_firmware_page_number(g_firmware_size);
 	block_count = (page_count / 30) + ((page_count % 30) != 0);
@@ -1198,13 +1406,15 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 	err = TP_SUCCESS;
 
 UPDATE_FIRMWARE_EXIT:
-    
+
+#if defined(__ENABLE_DEBUG__) && defined(__ENABLE_SYSLOG_DEBUG__)
     if(bDisableOutputBufferDebug == true)
     {
         // Re-Enable Output Buffer Debug
         DEBUG_PRINTF("Re-Enable Output Buffer Debug.\r\n");
         g_bEnableOutputBufferDebug = true;
     }
+#endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
 
 	return err;
 }

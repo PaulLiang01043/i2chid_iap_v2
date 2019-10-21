@@ -90,7 +90,7 @@ int send_fw_version_command(void)
     unsigned char fw_ver_cmd[4] = {0x53, 0x00, 0x00, 0x01};
 
     /* Send FW ID Command to touch */
-    DEBUG_PRINTF("cmd: 0x%x, 0x%x, 0x%x, 0x%x.\r\n", fw_ver_cmd[0], fw_ver_cmd[1], fw_ver_cmd[2], fw_ver_cmd[3]);
+    DEBUG_PRINTF("cmd: 0x%02x, 0x%02x, 0x%02x, 0x%02x.\r\n", fw_ver_cmd[0], fw_ver_cmd[1], fw_ver_cmd[2], fw_ver_cmd[3]);
     err = write_cmd(fw_ver_cmd, sizeof(fw_ver_cmd), ELAN_WRITE_DATA_TIMEOUT_MSEC);
     if (err != TP_SUCCESS)
         ERROR_PRINTF("Fail to send FW Version command! errno=0x%x.\r\n", err);
@@ -112,7 +112,7 @@ int read_fw_version_data(bool quiet /* Silent Mode */)
         ERROR_PRINTF("Fail to read FW Version data, errno=0x%x.\r\n", err);
         goto READ_FW_VERSION_DATA_EXIT;
     }
-    DEBUG_PRINTF("cmd_data: 0x%x, 0x%x, 0x%x, 0x%x.\r\n", cmd_data[0], cmd_data[1], cmd_data[2], cmd_data[3]);
+    DEBUG_PRINTF("cmd_data: 0x%02x, 0x%02x, 0x%02x, 0x%02x.\r\n", cmd_data[0], cmd_data[1], cmd_data[2], cmd_data[3]);
 
     /* Check if Data is Firmware Version */
     if ((cmd_data[0] == 0x52) && (((cmd_data[1] & 0xf0) >> 4) == 0))
@@ -129,6 +129,50 @@ int read_fw_version_data(bool quiet /* Silent Mode */)
     err = TP_SUCCESS;
 
 READ_FW_VERSION_DATA_EXIT:
+    return err;
+}
+
+int get_fw_version_data(unsigned short *p_fw_version)
+{
+    int err = TP_SUCCESS;
+    unsigned short fw_ver = 0,
+                   major_fw_ver = 0,
+                   minor_fw_ver = 0;
+    unsigned char cmd_data[4] = {0};
+
+    /* Check Data Buffer */
+    if(p_fw_version == NULL)
+    {
+        ERROR_PRINTF("%s: NULL Pointer!\r\n", __func__);
+        err = TP_ERR_INVALID_PARAM;
+        goto GET_FW_VERSION_DATA_EXIT;
+    }
+
+    err = read_data(cmd_data, sizeof(cmd_data), ELAN_READ_DATA_TIMEOUT_MSEC);
+    if (err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("Fail to read FW Version data, errno=0x%x.\r\n", err);
+        goto GET_FW_VERSION_DATA_EXIT;
+    }
+    DEBUG_PRINTF("cmd_data: 0x%02x, 0x%02x, 0x%02x, 0x%02x.\r\n", cmd_data[0], cmd_data[1], cmd_data[2], cmd_data[3]);
+
+    /* Check if Data is Firmware Version */
+    if ((cmd_data[0] != 0x52) || (((cmd_data[1] & 0xf0) >> 4) != 0))
+    {
+        err = TP_ERR_DATA_PATTERN;
+        ERROR_PRINTF("Invalid Data Format (%02x %02x), errno=0x%x.\r\n", cmd_data[0], cmd_data[1], err);
+        goto GET_FW_VERSION_DATA_EXIT;
+    }
+
+    major_fw_ver = ((cmd_data[1] & 0x0f) << 4) | ((cmd_data[2] & 0xf0) >> 4);
+    minor_fw_ver = ((cmd_data[2] & 0x0f) << 4) | ((cmd_data[3] & 0xf0) >> 4);
+    fw_ver = (major_fw_ver << 8) | minor_fw_ver;
+    DEBUG_PRINTF("fw_ver: %04x\r\n", fw_ver);
+
+    *p_fw_version = fw_ver;
+    err = TP_SUCCESS;
+
+GET_FW_VERSION_DATA_EXIT:
     return err;
 }
 
@@ -220,6 +264,51 @@ READ_BOOT_CODE_VERSION_DATA_EXIT:
     return err;
 }
 
+int get_boot_code_version_data(unsigned short *p_bc_version)
+{
+    int err = TP_SUCCESS;
+    unsigned short bc_ver = 0,
+                   major_bc_ver = 0,
+                   minor_bc_ver = 0;
+    unsigned char cmd_data[4] = {0};
+
+    /* Check Data Buffer */
+    if(p_bc_version == NULL)
+    {
+        ERROR_PRINTF("%s: NULL Pointer!\r\n", __func__);
+        err = TP_ERR_INVALID_PARAM;
+        goto GET_BOOT_CODE_VERSION_DATA_EXIT;
+    }
+
+    err = read_data(cmd_data, sizeof(cmd_data), ELAN_READ_DATA_TIMEOUT_MSEC);
+    if (err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("Fail to read Boot Code Version data, errno=0x%x.\r\n", err);
+        goto GET_BOOT_CODE_VERSION_DATA_EXIT;
+    }
+    DEBUG_PRINTF("cmd_data: 0x%x, 0x%x, 0x%x, 0x%x.\r\n", cmd_data[0], cmd_data[1], cmd_data[2], cmd_data[3]);
+
+    /* Check if Data is Boot Code Version */
+    if ((cmd_data[0] != 0x52) || (((cmd_data[1] & 0xf0) >> 4) != 0x1))
+    {
+        err = TP_ERR_DATA_PATTERN;
+        ERROR_PRINTF("Invalid Data Format (%02x %02x), errno=0x%x.\r\n", cmd_data[0], cmd_data[1], err);
+        goto GET_BOOT_CODE_VERSION_DATA_EXIT;
+    }
+
+
+    major_bc_ver = ((cmd_data[1] & 0x0f) << 4) | ((cmd_data[2] & 0xf0) >> 4);
+    minor_bc_ver = ((cmd_data[2] & 0x0f) << 4) | ((cmd_data[3] & 0xf0) >> 4);
+    bc_ver = (major_bc_ver << 8) | minor_bc_ver;
+    DEBUG_PRINTF("bc_ver: %04x\r\n", bc_ver);
+
+    *p_bc_version = bc_ver;
+    err = TP_SUCCESS;
+
+GET_BOOT_CODE_VERSION_DATA_EXIT:
+    return err;
+}
+
 // Calibration
 int send_rek_command(void)
 { 
@@ -304,6 +393,69 @@ int send_exit_test_mode_command(void)
 	if (err != TP_SUCCESS)
         ERROR_PRINTF("Fail to send Enter Test Mode command! errno=0x%x.\r\n", err);
 
+    return err;
+}
+
+// ROM Data
+int send_read_rom_data_command(unsigned short addr, int solution_id)
+{
+	int err = TP_SUCCESS;
+    unsigned char read_rom_data_cmd[6] =  {0x96, 0x00, 0x00, 0x00, 0x00, 0x11}; /* Show Bulk ROM Data Command */
+
+	/* Set Address & Length */
+	read_rom_data_cmd[1] = (addr & 0xFF00) >> 8;	//ADDR_H
+	read_rom_data_cmd[2] =  addr & 0x00FF; 		    //ADDR_L
+
+    // Information Command Parameter
+    if ((solution_id == SOLUTION_ID_EKTH6315x1) || \
+        (solution_id == SOLUTION_ID_EKTH6315x2) || \
+        (solution_id == SOLUTION_ID_EKTH6315to5015M) || \
+        (solution_id == SOLUTION_ID_EKTH6315to3915P)) // 63XX Solution
+        read_rom_data_cmd[5] = 0x21; // 63XX: byte[5]=0x21 => Read Information
+    else
+        read_rom_data_cmd[5] = 0x11; // 53XX: byte[5]=0x11 => Read Information
+
+    /* Send Show Bulk ROM Data Command */
+    DEBUG_PRINTF("cmd: 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x.\r\n", \
+					read_rom_data_cmd[0], read_rom_data_cmd[1], read_rom_data_cmd[2], \
+					read_rom_data_cmd[3], read_rom_data_cmd[4], read_rom_data_cmd[5]);
+    err = write_cmd(read_rom_data_cmd, 6, ELAN_WRITE_DATA_TIMEOUT_MSEC);
+	if (err != TP_SUCCESS)
+        ERROR_PRINTF("Fail to send Read ROM Data command! errno=0x%x.\r\n", err);
+
+    return err;
+}
+
+int receive_rom_data(unsigned short *p_rom_data)
+{
+    int err = TP_SUCCESS;
+    unsigned char cmd_data[6] = {0};
+    unsigned short rom_data = 0;
+
+    err = read_data(cmd_data, sizeof(cmd_data), ELAN_READ_CALI_RESP_TIMEOUT_MSEC);
+	if(err != TP_SUCCESS) // Error or Timeout
+	{
+		ERROR_PRINTF("Fail to receive ROM data! errno=%d.\r\n", err);
+        goto RECEIVE_ROM_DATA_EXIT;
+	}
+	DEBUG_PRINTF("cmd_data: 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x.\r\n", cmd_data[0], cmd_data[1], cmd_data[2], cmd_data[3], cmd_data[4], cmd_data[5]);
+
+    /* Check if data invalid */
+	if (cmd_data[0] != 0x95)
+	{
+		err = TP_ERR_DATA_PATTERN;
+        ERROR_PRINTF("Data Format Invalid! errno=%d.\r\n", err);
+        goto RECEIVE_ROM_DATA_EXIT;
+	}
+
+    // Load ROM Data to Input Buffer
+    rom_data = (unsigned short)((cmd_data[3] << 8) | cmd_data[4]);
+    DEBUG_PRINTF("ROM Data: 0x%04x.\r\n", rom_data);
+
+    *p_rom_data = rom_data;
+	err = TP_SUCCESS;
+
+RECEIVE_ROM_DATA_EXIT:
     return err;
 }
 
