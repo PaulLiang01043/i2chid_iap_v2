@@ -26,7 +26,7 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"2.b"
+#define	ELAN_TOOL_SW_VERSION 	"2.c"
 #endif //ELAN_TOOL_SW_VERSION
 
 // File Length
@@ -96,6 +96,9 @@ bool g_quiet = false;
 // Help Info.
 bool g_help = false;
 
+// BC Version
+unsigned short g_bc_version = 0;
+
 // Parameter Option Settings
 #ifdef __SUPPORT_RESULT_LOG__
 const char* const short_options = "p:P:f:oikl:qdh";
@@ -147,9 +150,9 @@ int check_remark_id(void);
 // Calibration
 int calibrate_touch(void);
 
-// Hello Packet
-int get_hello_packet(unsigned char *data);
-int get_hello_packet_with_error_retry(unsigned char *data, int retry_count);
+// Hello Packet & BC Version
+int get_hello_packet_bc_version(unsigned char *p_hello_packet, unsigned short *p_bc_version);
+int get_hello_packet_with_error_retry(unsigned char *p_hello_packet, int retry_count);
 
 // Page/Frame Data
 int read_page_data(unsigned short page_data_addr, unsigned short page_data_size, unsigned char *page_data_buf, size_t page_data_buf_size);
@@ -667,18 +670,19 @@ CALIBRATE_TOUCH_EXIT:
 	return err;
 }
 
-// Hello Packet
-int get_hello_packet(unsigned char *data)
+// Hello Packet & BC Version
+int get_hello_packet_bc_version(unsigned char *p_hello_packet, unsigned short *p_bc_version)
 {
 	int err = TP_SUCCESS;
 	unsigned char hello_packet[4] = {0};
+    unsigned short bc_version = 0;
 
 	// Make Sure Page Data Buffer Valid
-	if(data == NULL)
+	if(p_hello_packet == NULL)
 	{
 		ERROR_PRINTF("%s: NULL Page Data Buffer!\r\n", __func__);
 		err = TP_ERR_INVALID_PARAM;
-		goto GET_HELLO_PACKET_EXIT;
+		goto GET_HELLO_PACKET_BC_VERSION_EXIT;
 	}
 
 	// Send 7-bit I2C Slave Address
@@ -686,7 +690,7 @@ int get_hello_packet(unsigned char *data)
 	if(err != TP_SUCCESS)
 	{
 		ERROR_PRINTF("%s: Fail to Send Request Hello Packet Command! errno=0x%x.\r\n", __func__, err);
-		goto GET_HELLO_PACKET_EXIT;
+		goto GET_HELLO_PACKET_BC_VERSION_EXIT;
 	}
 
 	// Receive Hello Packet
@@ -694,29 +698,43 @@ int get_hello_packet(unsigned char *data)
 	if(err == TP_ERR_TIMEOUT)
 	{
 		DEBUG_PRINTF("%s: Fail to Receive Hello Packet! Timeout!\r\n", __func__);
-		goto GET_HELLO_PACKET_EXIT;
+		goto GET_HELLO_PACKET_BC_VERSION_EXIT;
 	}
 	if(err != TP_SUCCESS)
 	{
 		ERROR_PRINTF("%s: Fail to Receive Hello Packet! errno=0x%x.\r\n", __func__, err);
-		goto GET_HELLO_PACKET_EXIT;
+		goto GET_HELLO_PACKET_BC_VERSION_EXIT;
 	}
 	DEBUG_PRINTF("vendor_cmd_data: %02x %02x %02x %02x.\r\n", hello_packet[0], hello_packet[1], hello_packet[2], hello_packet[3]);
 
-	// Copy first byte of Hello Packet to Input Buffer
-	*data = hello_packet[0];
+	// Hello Packet
+    DEBUG_PRINTF("Hello Packet: %02x.\r\n", hello_packet[0]);
+	*p_hello_packet = hello_packet[0];
+
+    // BC Version
+    bc_version = (hello_packet[2] << 8) | hello_packet[3];
+    DEBUG_PRINTF("BC Version: %02x.\r\n", bc_version);
+    *p_bc_version = bc_version;
 
 	// Success
 	err = TP_SUCCESS;
 
-GET_HELLO_PACKET_EXIT:
+GET_HELLO_PACKET_BC_VERSION_EXIT:
 	return err;
 }
 
-int get_hello_packet_with_error_retry(unsigned char *data, int retry_count)
+int get_hello_packet_with_error_retry(unsigned char *p_hello_packet, int retry_count)
 {
 	int err = TP_SUCCESS,
 		retry_index = 0;
+
+	// Make Sure Page Data Buffer Valid
+	if(p_hello_packet == NULL)
+	{
+		ERROR_PRINTF("%s: NULL Page Data Buffer!\r\n", __func__);
+		err = TP_ERR_INVALID_PARAM;
+		goto GET_HELLO_PACKET_WITH_ERROR_RETRY_EXIT;
+	}
 
 	// Make Sure Retry Count Positive
 	if(retry_count <= 0)
@@ -724,7 +742,7 @@ int get_hello_packet_with_error_retry(unsigned char *data, int retry_count)
 
 	for(retry_index = 0; retry_index < retry_count; retry_index++)
 	{
-		err = get_hello_packet(data);
+        err = get_hello_packet_bc_version(p_hello_packet, &g_bc_version);
 		if(err == TP_SUCCESS)
 		{
 			// Without any error => Break retry loop and continue.
@@ -1249,8 +1267,8 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 		block_page_num = 0;
 	unsigned char info_page_buf[ELAN_FIRMWARE_PAGE_SIZE] = {0},
 				  page_block_buf[ELAN_FIRMWARE_PAGE_SIZE * 30] = {0},
-                  iap_version = 0;
-    unsigned short bc_version = 0;
+                  bc_ver_high_byte = 0,
+                  bc_ver_low_byte = 0;
 #if defined(__ENABLE_DEBUG__) && defined(__ENABLE_SYSLOG_DEBUG__)
     bool bDisableOutputBufferDebug = false;
 #endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
@@ -1282,14 +1300,6 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 	printf("--------------------------------\r\n");
 	printf("FW Path: \"%s\".\r\n", filename);
 
-    // Get Boot Code Version
-	err = get_boot_code_version(&bc_version);
-	if(err != TP_SUCCESS)
-    {
-		ERROR_PRINTF("%s: Fail to Get BC Version! errno=0x%x.\r\n", __func__, err);
-		goto UPDATE_FIRMWARE_EXIT;
-	}
-
 	if(recovery == false) // Normal Mode
 	{
 		//
@@ -1306,10 +1316,12 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
     // 
     // Remark ID Check 
     //
-	iap_version = (unsigned char)(bc_version & 0x00FF);
-    DEBUG_PRINTF("IAP Version: 0x%02x.\r\n", iap_version);
-	if(iap_version >= 0x60)
+    bc_ver_high_byte = (unsigned char)((g_bc_version & 0xFF00) >> 8);
+    bc_ver_low_byte  = (unsigned char)(g_bc_version & 0x00FF);
+    if(bc_ver_high_byte != bc_ver_low_byte)
 	{
+        DEBUG_PRINTF("Check Remark ID...\r\n");
+
         err = check_remark_id();
         if(err != TP_SUCCESS)
 		{
