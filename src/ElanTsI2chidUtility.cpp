@@ -5,7 +5,7 @@
   Copyright (c) ELAN microelectronics corp. 2019, All Rights Reserved
 
   Module Name:
-	ElanTsFuncUtility.cpp
+	ElanTsI2chidUtility.cpp
 
   Environment:
 	All kinds of Linux-like Platform.
@@ -14,7 +14,8 @@
 
 #include "ErrCode.h"
 #include "InterfaceGet.h"
-#include "ElanTsFuncUtility.h"
+#include "ElanTsI2chidUtility.h"
+
 
 /***************************************************
  * TP Functions
@@ -80,6 +81,42 @@ int read_fw_id_data(void)
     err = TP_SUCCESS;
 
 READ_FW_ID_DATA_EXIT:
+    return err;
+}
+
+int get_fw_id_data(unsigned short *p_fw_id)
+{
+    int err = TP_SUCCESS,
+		major_fw_id = 0,
+        minor_fw_id = 0;
+    unsigned short fw_id = 0;
+    unsigned char cmd_data[4] = {0};
+
+    err = read_data(cmd_data, sizeof(cmd_data), ELAN_READ_DATA_TIMEOUT_MSEC);
+    if (err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("Fail to read FW ID data, errno=0x%x.\n", err);
+        goto GET_FW_ID_DATA_EXIT;
+    }
+    DEBUG_PRINTF("cmd_data: 0x%x, 0x%x, 0x%x, 0x%x.\r\n", cmd_data[0], cmd_data[1], cmd_data[2], cmd_data[3]);
+
+    /* Check if Data is Firmware ID */
+    if ((cmd_data[0] != 0x52) || (((cmd_data[1] & 0xf0) >> 4) != 0xf))
+    {
+        err = TP_ERR_DATA_PATTERN;
+        ERROR_PRINTF("Invalid Data Format (%02x %02x), errno=0x%x.\r\n", cmd_data[0], cmd_data[1], err);
+        goto GET_FW_ID_DATA_EXIT;
+    }
+
+    major_fw_id = ((cmd_data[1] & 0x0f) << 4) | ((cmd_data[2] & 0xf0) >> 4);
+    minor_fw_id = ((cmd_data[2] & 0x0f) << 4) | ((cmd_data[3] & 0xf0) >> 4);
+    fw_id = (major_fw_id << 8) | minor_fw_id;
+    DEBUG_PRINTF("fw_id: %04x\r\n", fw_id);
+
+    *p_fw_id = fw_id;
+    err = TP_SUCCESS;
+
+GET_FW_ID_DATA_EXIT:
     return err;
 }
 
@@ -217,6 +254,42 @@ int read_test_version_data(void)
     err = TP_SUCCESS;
 
 READ_TEST_VERSION_DATA_EXIT:
+    return err;
+}
+
+int get_test_version_data(unsigned short *p_test_version)
+{
+    int err = TP_SUCCESS,
+		test_ver = 0,
+        solution_ver = 0;
+    unsigned short test_solution_ver = 0;
+    unsigned char cmd_data[4] = {0};
+
+    err = read_data(cmd_data, sizeof(cmd_data), ELAN_READ_DATA_TIMEOUT_MSEC);
+    if (err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("Fail to receive Test Version data, errno=0x%x.\r\n", err);
+        goto GET_TEST_VERSION_DATA_EXIT;
+    }
+    DEBUG_PRINTF("cmd_data: 0x%x, 0x%x, 0x%x, 0x%x.\r\n", cmd_data[0], cmd_data[1], cmd_data[2], cmd_data[3]);
+
+    /* Check if Data is for Test Version */
+    if ((cmd_data[0] != 0x52) || (((cmd_data[1] & 0xf0) >> 4) != 0xe))
+    {
+        err = TP_ERR_DATA_PATTERN;
+        ERROR_PRINTF("Invalid Data Format (%02x %02x), errno=0x%x.\r\n", cmd_data[0], cmd_data[1], err);
+        goto GET_TEST_VERSION_DATA_EXIT;
+    }
+
+    test_ver = ((cmd_data[1] & 0x0f) << 4) | ((cmd_data[2] & 0xf0) >> 4);
+    solution_ver = ((cmd_data[2] & 0x0f) << 4) | ((cmd_data[3] & 0xf0) >> 4);
+    test_solution_ver = (test_ver << 8) | solution_ver;
+    DEBUG_PRINTF("test_solution_ver: %04x\r\n", test_solution_ver);
+
+    *p_test_version = test_solution_ver;
+    err = TP_SUCCESS;
+
+GET_TEST_VERSION_DATA_EXIT:
     return err;
 }
 
@@ -397,23 +470,50 @@ int send_exit_test_mode_command(void)
 }
 
 // ROM Data
-int send_read_rom_data_command(unsigned short addr, int solution_id)
+int send_read_rom_data_command(unsigned short addr, bool recovery, unsigned char info)
 {
 	int err = TP_SUCCESS;
-    unsigned char read_rom_data_cmd[6] =  {0x96, 0x00, 0x00, 0x00, 0x00, 0x11}; /* Show Bulk ROM Data Command */
+    unsigned char read_rom_data_cmd[6] =  {0x96, 0x00, 0x00, 0x00, 0x00, 0x11} /* Show Bulk ROM Data Command */,
+                  solution_id = 0,
+                  bc_version_high_byte = 0;
+
+    // Assign info to appropriate variable
+    if(recovery == false) // Normal Mode
+        solution_id = info;
+    else // Recovery Mode
+        bc_version_high_byte = info;
 
 	/* Set Address & Length */
 	read_rom_data_cmd[1] = (addr & 0xFF00) >> 8;	//ADDR_H
 	read_rom_data_cmd[2] =  addr & 0x00FF; 		    //ADDR_L
 
     // Information Command Parameter
-    if ((solution_id == SOLUTION_ID_EKTH6315x1) || \
-        (solution_id == SOLUTION_ID_EKTH6315x2) || \
-        (solution_id == SOLUTION_ID_EKTH6315to5015M) || \
-        (solution_id == SOLUTION_ID_EKTH6315to3915P)) // 63XX Solution
-        read_rom_data_cmd[5] = 0x21; // 63XX: byte[5]=0x21 => Read Information
-    else
-        read_rom_data_cmd[5] = 0x11; // 53XX: byte[5]=0x11 => Read Information
+    // [Note] Paul @ 20191106
+    // Since Solution ID (FW Version) is only available in normal mode,
+    //   we use high byte of bc_version to decide IC solution of the current touch controller in recovery mode.
+    if(recovery == false) // Normal Mode
+    {
+        if ((solution_id == SOLUTION_ID_EKTH6315x1) || \
+            (solution_id == SOLUTION_ID_EKTH6315x2) || \
+            (solution_id == SOLUTION_ID_EKTH6315to5015M) || \
+            (solution_id == SOLUTION_ID_EKTH6315to3915P)) // 63XX Solution
+            read_rom_data_cmd[5] = 0x21; // 63XX: byte[5]=0x21 => Read Information
+        else
+            read_rom_data_cmd[5] = 0x11; // 53XX: byte[5]=0x11 => Read Information
+    }
+    else // Recovery Mode
+    {
+        if (/* 63XX Solution */ \
+            (bc_version_high_byte == BC_VER_H_BYTE_FOR_EKTA6315_I2CHID) || \
+            (bc_version_high_byte == BC_VER_H_BYTE_FOR_EKTA6308_I2CHID) || \
+            (bc_version_high_byte == BC_VER_H_BYTE_FOR_EKTH6315_TO_5015M_I2CHID) || \
+            (bc_version_high_byte == BC_VER_H_BYTE_FOR_EKTH6315_TO_3915P_I2CHID) || \
+            /* 73XX Solution */ \
+            (bc_version_high_byte == BC_VER_H_BYTE_FOR_EKTA7315_I2CHID))
+            read_rom_data_cmd[5] = 0x21; // 63XX: byte[5]=0x21 => Read Information
+        else
+            read_rom_data_cmd[5] = 0x11; // 53XX: byte[5]=0x11 => Read Information
+    }
 
     /* Send Show Bulk ROM Data Command */
     DEBUG_PRINTF("cmd: 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x.\r\n", \
@@ -482,6 +582,60 @@ int send_show_bulk_rom_data_command(unsigned short addr, unsigned short len)
     return err;
 }
 
+// Bulk ROM Data (in Boot Code)
+int send_show_bulk_rom_data_command(unsigned short addr)
+{
+	int err = TP_SUCCESS;
+    unsigned char show_bulk_rom_data_cmd[6] =  {0x59, 0x00, 0x00, 0x00, 0x00, 0x01}; /* Show Bulk ROM Data Command (cmd[1]=0x00 in Boot Code) */
+
+	/* Set Address */
+	show_bulk_rom_data_cmd[2] = (addr & 0xFF00) >> 8;	//ADDR_H
+	show_bulk_rom_data_cmd[3] =  addr & 0x00FF; 		//ADDR_L
+
+    /* Send Show Bulk ROM Data Command */
+    DEBUG_PRINTF("cmd: 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x.\r\n", \
+					show_bulk_rom_data_cmd[0], show_bulk_rom_data_cmd[1], show_bulk_rom_data_cmd[2], \
+					show_bulk_rom_data_cmd[3], show_bulk_rom_data_cmd[4], show_bulk_rom_data_cmd[5]);
+    err = write_cmd(show_bulk_rom_data_cmd, 6, ELAN_WRITE_DATA_TIMEOUT_MSEC);
+	if (err != TP_SUCCESS)
+        ERROR_PRINTF("Fail to send Show Bulk ROM Data command! errno=0x%x.\r\n", err);
+
+    return err;
+}
+
+int receive_bulk_rom_data(unsigned short *p_rom_data)
+{
+    int err = TP_SUCCESS;
+    unsigned char cmd_data[5] = {0};
+    unsigned short rom_data = 0;
+
+    err = read_data(cmd_data, sizeof(cmd_data), ELAN_READ_CALI_RESP_TIMEOUT_MSEC);
+	if(err != TP_SUCCESS) // Error or Timeout
+	{
+		ERROR_PRINTF("Fail to receive Bulk ROM data! errno=%d.\r\n", err);
+        goto RECEIVE_BULK_ROM_DATA_EXIT;
+	}
+	DEBUG_PRINTF("cmd_data: 0x%x, 0x%x, 0x%x, 0x%x, 0x%x.\r\n", cmd_data[0], cmd_data[1], cmd_data[2], cmd_data[3], cmd_data[4]);
+
+    /* Check if data invalid */
+	if (cmd_data[0] != 0x99)
+	{
+		err = TP_ERR_DATA_PATTERN;
+        ERROR_PRINTF("Bulk Data Format Invalid! errno=%d.\r\n", err);
+        goto RECEIVE_BULK_ROM_DATA_EXIT;
+	}
+
+    // Load ROM Data to Input Buffer
+    rom_data = (unsigned short)((cmd_data[3] << 8) | cmd_data[4]);
+    DEBUG_PRINTF("Bulk ROM Data: 0x%04x.\r\n", rom_data);
+
+    *p_rom_data = rom_data;
+	err = TP_SUCCESS;
+
+RECEIVE_BULK_ROM_DATA_EXIT:
+    return err;
+}
+
 // IAP Mode
 int send_enter_iap_command(void)
 {
@@ -526,6 +680,53 @@ int send_slave_address(void)
         ERROR_PRINTF("Fail to send Elan TS I2C Slave Address! errno=0x%x.\r\n", err);
 
     return err;
+}
+
+// Frame Data
+int write_frame_data(int data_offset, int data_len, unsigned char *frame_buf, int frame_buf_size)
+{
+	int err = TP_SUCCESS;
+	unsigned char hid_frame_data[ELAN_I2CHID_OUTPUT_BUFFER_SIZE] = {0};
+
+	// Validate Data Length
+	if((data_len == 0) || (data_len > ELAN_I2CHID_PAGE_FRAME_SIZE))
+	{
+		ERROR_PRINTF("%s: Invalid Data Length: %d.\r\n", __func__, data_len);
+		err = TP_ERR_INVALID_PARAM;
+		goto WRITE_FRAME_DATA_EXIT;
+	}
+
+	// Valid Frame Buffer
+	if(frame_buf == NULL)
+	{
+		ERROR_PRINTF("%s: NULL Frame Buffer Pointer!\r\n", __func__);
+		err = TP_ERR_INVALID_PARAM;
+		goto WRITE_FRAME_DATA_EXIT;
+	}
+
+	// Valid Frame Buffer Size
+	if((frame_buf_size < data_len) || (frame_buf_size > ELAN_I2CHID_OUTPUT_BUFFER_SIZE))
+	{
+		ERROR_PRINTF("%s: Invalid Frame Buffer Size: %d.\r\n", __func__, frame_buf_size);
+		err = TP_ERR_INVALID_PARAM;
+		goto WRITE_FRAME_DATA_EXIT;
+	}
+
+	// Add header of vendor command to frame data
+	hid_frame_data[0] = ELAN_HID_OUTPUT_REPORT_ID;
+	hid_frame_data[1] = 0x21;
+	hid_frame_data[2] = (unsigned char)((data_offset & 0xFF00) >> 8);	// High Byte of Data Offset //ex:00
+	hid_frame_data[3] = (unsigned char) (data_offset & 0x00FF);			// Low  Byte of Data Offset //ex:1B
+	hid_frame_data[4] = data_len;
+	memcpy(&hid_frame_data[5], frame_buf, frame_buf_size);
+   
+	// Write frame data to touch
+	err = __hidraw_write(hid_frame_data, sizeof(hid_frame_data), ELAN_WRITE_DATA_TIMEOUT_MSEC);
+	if(err != TP_SUCCESS)
+		ERROR_PRINTF("Fail to write frame data, errno=%d.\r\n", err);
+
+WRITE_FRAME_DATA_EXIT:
+	return err;
 }
 
 // Flash Write
@@ -587,4 +788,3 @@ int send_request_hello_packet_command(void)
    
     return err;
 }
-

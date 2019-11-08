@@ -5,7 +5,7 @@
   Copyright (c) ELAN microelectronics corp. 2019, All Rights Reserved
 
   Module Name:
-	ElanTsFuncUtility.h
+	ElanTsI2chidUtility.h
 
   Environment:
 	All kinds of Linux-like Platform.
@@ -15,16 +15,16 @@
 
 **/
 
-#ifndef _ELAN_TS_FUNC_UTILITY_H_
-#define _ELAN_TS_FUNC_UTILITY_H_
+#ifndef _ELAN_TS_I2CHID_UTILITY_H_
+#define _ELAN_TS_I2CHID_UTILITY_H_
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "I2CHIDLinuxGet.h"
 
 /***************************************************
  * Definitions
  ***************************************************/
-
 // Slave Address
 #ifndef ELAN_I2C_SLAVE_ADDR
 #define ELAN_I2C_SLAVE_ADDR	0x20
@@ -34,36 +34,6 @@
 #ifndef ELAN_READ_CALI_RESP_TIMEOUT_MSEC
 #define	ELAN_READ_CALI_RESP_TIMEOUT_MSEC	30000
 #endif //ELAN_READ_CALI_RESP_TIMEOUT_MSEC
-
-// Information Page Address
-#ifndef ELAN_INFO_PAGE_MEMORY_ADDR
-#define	ELAN_INFO_PAGE_MEMORY_ADDR	        0x8040
-#endif //ELAN_INFO_PAGE_MEMORY_ADDR
-
-// Information Page Address to Write
-#ifndef ELAN_INFO_PAGE_WRITE_MEMORY_ADDR
-#define	ELAN_INFO_PAGE_WRITE_MEMORY_ADDR	0x0040
-#endif //ELAN_INFO_PAGE_WRITE_MEMORY_ADDR
-
-// Information Page Address
-#ifndef ELAN_INFO_ROM_FWID_MEMORY_ADDR
-#define	ELAN_INFO_ROM_FWID_MEMORY_ADDR	    0x8080
-#endif //ELAN_INFO_ROM_FWID_MEMORY_ADDR
-
-// Elan ROM Address of Remark ID
-#ifndef ELAN_INFO_ROM_REMARK_ID_MEMORY_ADDR
-#define	ELAN_INFO_ROM_REMARK_ID_MEMORY_ADDR 0x801F
-#endif //ELAN_INFO_ROM_REMARK_ID_MEMORY_ADDR
-
-// Firmware Page Size
-#ifndef ELAN_FIRMWARE_PAGE_SIZE
-#define ELAN_FIRMWARE_PAGE_SIZE 132 /* (1+64+1)*2=132 byte */
-#endif //ELAN_FIRMWARE_PAGE_SIZE
-
-// Frame Page Data Size
-#ifndef ELAN_FIRMWARE_PAGE_DATA_SIZE
-#define ELAN_FIRMWARE_PAGE_DATA_SIZE	128  // 0x40 (in word)
-#endif //ELAN_FIRMWARE_PAGE_DATA_SIZE
 
 // ELAN I2C-HID Buffer Size for Data
 #ifndef ELAN_I2CHID_DATA_BUFFER_SIZE
@@ -140,6 +110,35 @@ const int SOLUTION_ID_EKTH6315to3915P = 0x15;
 //6308
 const int SOLUTION_ID_EKTH6308x1	= 0x63;
 
+//Define Boot Code High Byte for Specific ICs
+//5312b
+const int BC_VER_H_BYTE_H_NIBBLE_FOR_EKTA5312b_I2C_USB	= 0x6;
+const int BC_VER_H_BYTE_FOR_EKTA5312bx1_I2CHID	= 0xA5;
+const int BC_VER_H_BYTE_FOR_EKTA5312bx2_I2CHID	= 0xB5;
+const int BC_VER_H_BYTE_FOR_EKTA5312bx3_I2CHID	= 0xC5;
+
+//5312c
+const int BC_VER_H_BYTE_H_NIBBLE_FOR_EKTA5312c_I2C_USB	= 0x7;
+const int BC_VER_H_BYTE_FOR_EKTA5312cx1_I2CHID	= 0xA6;
+const int BC_VER_H_BYTE_FOR_EKTA5312cx2_I2CHID	= 0xB6;
+const int BC_VER_H_BYTE_FOR_EKTA5312cx3_I2CHID	= 0xC6;
+
+//6315
+const int BC_VER_H_BYTE_H_NIBBLE_FOR_EKTA6315_I2C_USB	= 0x8;
+const int BC_VER_H_BYTE_FOR_EKTA6315_I2CHID	= 0xA7;
+
+//6315 to 5015M
+const int BC_VER_H_BYTE_FOR_EKTH6315_TO_5015M_I2CHID = 0xE6;
+
+//6315 to 3915P
+const int BC_VER_H_BYTE_FOR_EKTH6315_TO_3915P_I2CHID = 0xF6;
+
+//6308
+const int BC_VER_H_BYTE_FOR_EKTA6308_I2CHID	= 0xA8;
+
+//7315
+const int BC_VER_H_BYTE_FOR_EKTA7315_I2CHID	= 0xA9;
+
 /*******************************************
  * Global Data Structure Declaration
  ******************************************/
@@ -182,6 +181,10 @@ extern int read_data(unsigned char *data_buf, int len, int timeout_ms);
 // Write Vendor Command
 extern int write_vendor_cmd(unsigned char *cmd_buf, int len, int timeout_ms);
 
+// HID Raw I/O
+extern int __hidraw_write(unsigned char* buf, int len, int timeout_ms); 
+extern int __hidraw_read(unsigned char* buf, int len, int timeout_ms);
+
 /*******************************************
  * Function Prototype
  ******************************************/
@@ -192,6 +195,7 @@ int send_set_power_status_command(int mode);
 // FW ID
 int send_fw_id_command(void);
 int read_fw_id_data(void);
+int get_fw_id_data(unsigned short *p_fw_id);
 
 // FW Version
 int send_fw_version_command(void);
@@ -201,6 +205,7 @@ int get_fw_version_data(unsigned short *p_fw_version);
 // Test Version
 int send_test_version_command(void);
 int read_test_version_data(void);
+int get_test_version_data(unsigned short *p_test_version);
 
 // Boot Code Version
 int send_boot_code_version_command(void);
@@ -216,15 +221,22 @@ int send_enter_test_mode_command(void);
 int send_exit_test_mode_command(void);
 
 // ROM Data
-int send_read_rom_data_command(unsigned short addr, int solution_id);
+int send_read_rom_data_command(unsigned short addr, bool recovery, unsigned char info);
 int receive_rom_data(unsigned short *p_rom_data);
 
 // Bulk ROM Data
 int send_show_bulk_rom_data_command(unsigned short addr, unsigned short len);
 
+// Bulk ROM Data (in Boot Code)
+int send_show_bulk_rom_data_command(unsigned short addr);
+int receive_bulk_rom_data(unsigned short *p_rom_data);
+
 // IAP Mode
 int send_enter_iap_command(void);
 int send_slave_address(void);
+
+// Frame Data
+int write_frame_data(int data_offset, int data_len, unsigned char *frame_buf, int frame_buf_size);
 
 // Flash Write
 int send_flash_write_command(void);
@@ -233,4 +245,4 @@ int receive_flash_write_response(void);
 // Hello Packet
 int send_request_hello_packet_command(void);
 
-#endif //_ELAN_TS_FUNC_UTILITY_H_
+#endif //_ELAN_TS_I2CHID_UTILITY_H_

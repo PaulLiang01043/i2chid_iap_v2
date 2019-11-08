@@ -5,7 +5,9 @@
 program := i2chid_iap_v2
 objects := BaseLog.o \
 		   I2CHIDLinuxGet.o \
-		   ElanTsFuncUtility.o \
+           ElanTsI2chidUtility.o \
+		   ElanTsFuncApi.o \
+           ElanTsIapFileIoUtility.o \
 		   main.o
 libraries := stdc++ rt pthread
 executable_path := ./bin
