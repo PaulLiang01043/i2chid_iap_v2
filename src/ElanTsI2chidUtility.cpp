@@ -493,11 +493,16 @@ int send_read_rom_data_command(unsigned short addr, bool recovery, unsigned char
     //   we use high byte of bc_version to decide IC solution of the current touch controller in recovery mode.
     if(recovery == false) // Normal Mode
     {
-        if ((solution_id == SOLUTION_ID_EKTH6315x1) || \
+        if (/* 63XX Solution */
+            (solution_id == SOLUTION_ID_EKTH6315x1) || \
             (solution_id == SOLUTION_ID_EKTH6315x2) || \
             (solution_id == SOLUTION_ID_EKTH6315to5015M) || \
-            (solution_id == SOLUTION_ID_EKTH6315to3915P)) // 63XX Solution
-            read_rom_data_cmd[5] = 0x21; // 63XX: byte[5]=0x21 => Read Information
+            (solution_id == SOLUTION_ID_EKTH6315to3915P) || \
+            /* 73XX Solution */
+            (solution_id == SOLUTION_ID_EKTH7315x1) || \
+            (solution_id == SOLUTION_ID_EKTH7315x2) || \
+            (solution_id == SOLUTION_ID_EKTH7318x1))
+            read_rom_data_cmd[5] = 0x21; // 63XX or 73XX: byte[5]=0x21 => Read Information
         else
             read_rom_data_cmd[5] = 0x11; // 53XX: byte[5]=0x11 => Read Information
     }
@@ -637,6 +642,23 @@ RECEIVE_BULK_ROM_DATA_EXIT:
 }
 
 // IAP Mode
+int send_write_flash_key_command(void)
+{
+    int err = TP_SUCCESS;
+    unsigned char write_flash_key_cmd[4] = {0x54, 0xc0, 0xe1, 0x5a};
+    
+    /* Send Write Flash Key Command */
+	DEBUG_PRINTF("cmd: 0x%x, 0x%x, 0x%x, 0x%x.\r\n", write_flash_key_cmd[0], write_flash_key_cmd[1], write_flash_key_cmd[2], write_flash_key_cmd[3]);
+    err = write_cmd(write_flash_key_cmd, sizeof(write_flash_key_cmd), ELAN_WRITE_DATA_TIMEOUT_MSEC);
+	if (err != TP_SUCCESS)
+	{
+        ERROR_PRINTF("Fail to send Write Flash Key command! errno=0x%x.\r\n", err);
+	}
+
+    return err;
+}
+
+#if 0
 int send_enter_iap_command(void)
 {
 	int err = TP_SUCCESS;
@@ -665,6 +687,23 @@ int send_enter_iap_command(void)
 	err = TP_SUCCESS;
 
 SEND_ENTER_IAP_COMMAND_EXIT:
+	return err;
+}
+#endif //0
+
+int send_enter_iap_command(void)
+{
+	int err = TP_SUCCESS;
+	unsigned char enter_iap_cmd[4] = {0x54, 0x00, 0x12, 0x34};  
+
+	/* Send Enter IAP Command */
+	DEBUG_PRINTF("cmd: 0x%x, 0x%x, 0x%x, 0x%x.\r\n", enter_iap_cmd[0], enter_iap_cmd[1], enter_iap_cmd[2], enter_iap_cmd[3]);
+    err = write_cmd(enter_iap_cmd, sizeof(enter_iap_cmd), ELAN_WRITE_DATA_TIMEOUT_MSEC);
+	if (err != TP_SUCCESS)
+	{
+        ERROR_PRINTF("Fail to send Enter IAP command! errno=0x%x.\r\n", err);
+	}
+
 	return err;
 }
 

@@ -25,7 +25,7 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"2.d"
+#define	ELAN_TOOL_SW_VERSION 	"2.f"
 #endif //ELAN_TOOL_SW_VERSION
 
 // File Length
@@ -469,11 +469,12 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 		block_count = 0,
 		block_index = 0,
 		block_page_num = 0;
-    unsigned short bc_version = 0;
 	unsigned char info_page_buf[ELAN_FIRMWARE_PAGE_SIZE] = {0},
 				  page_block_buf[ELAN_FIRMWARE_PAGE_SIZE * 30] = {0},
                   bc_ver_high_byte = 0,
-                  bc_ver_low_byte = 0;
+                  bc_ver_low_byte = 0,
+                  iap_version = 0;
+    bool remark_id_check = false;
 #if defined(__ENABLE_DEBUG__) && defined(__ENABLE_SYSLOG_DEBUG__)
     bool bDisableOutputBufferDebug = false;
 #endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
@@ -521,11 +522,22 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
     //
     // Remark ID Check 
     //
-    bc_version = (recovery) ? g_bc_bc_version : g_fw_bc_version;
-    DEBUG_PRINTF("BC Version: %04x (BC: %04x, FW: %04x).\r\n", bc_version, g_bc_bc_version, g_fw_bc_version);
-    bc_ver_high_byte = (unsigned char)((bc_version & 0xFF00) >> 8);
-    bc_ver_low_byte  = (unsigned char)(bc_version & 0x00FF);
-    if(bc_ver_high_byte != bc_ver_low_byte) // EX: A7 60
+    if(recovery == false) // Normal Mode
+    {
+        iap_version = (unsigned char)(g_fw_bc_version & 0x00FF);
+		if(iap_version >= 0x60)
+			remark_id_check = true;
+		DEBUG_PRINTF("BC Version: %04x, remark_id_check: %s.\r\n", g_fw_bc_version, (remark_id_check) ? "true" : "false");
+    }
+    else // Recovery Mode
+    {
+        bc_ver_high_byte = (unsigned char)((g_bc_bc_version & 0xFF00) >> 8);
+        bc_ver_low_byte  = (unsigned char)(g_bc_bc_version & 0x00FF);
+        if(bc_ver_high_byte != bc_ver_low_byte) // EX: A7 60
+            remark_id_check = true;
+		DEBUG_PRINTF("BC Version: %04x, remark_id_check: %s.\r\n", g_bc_bc_version, (remark_id_check) ? "true" : "false");
+    }
+    if(remark_id_check == true)
 	{
         DEBUG_PRINTF("[%s Mode] Check Remark ID...\r\n", (recovery) ? "Recovery" : "Normal");
 
@@ -1133,7 +1145,8 @@ int main(int argc, char **argv)
 	if(g_rek == true)
 	{
 		DEBUG_PRINTF("Calibrate Touch...\r\n");
-		err = calibrate_touch() ;
+		//err = calibrate_touch() ;
+        err = calibrate_touch_with_error_retry(ERROR_RETRY_COUNT);
 		if (err != TP_SUCCESS)
 		{
 			ERROR_PRINTF("Fail to Calibrate Touch!\r\n");
@@ -1167,7 +1180,8 @@ int main(int argc, char **argv)
 
 		// Re-calibrate Touch
 		DEBUG_PRINTF("Calibrate Touch...\r\n");
-		err = calibrate_touch() ;
+		//err = calibrate_touch() ;
+        err = calibrate_touch_with_error_retry(ERROR_RETRY_COUNT);
 		if (err != TP_SUCCESS)
 		{
 			ERROR_PRINTF("Fail to Calibrate Touch!\r\n");

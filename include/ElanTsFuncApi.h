@@ -105,12 +105,14 @@ int get_test_version(unsigned short *p_test_version);
 
 // Calibration
 int calibrate_touch(void);
+int calibrate_touch_with_error_retry(int retry_count);
 
 // Hello Packet & BC Version
 int get_hello_packet_bc_version(unsigned char *p_hello_packet, unsigned short *p_bc_version);
 
 // IAP
-int switch_to_boot_code(void);
+//int switch_to_boot_code(void);
+int switch_to_boot_code(bool recovery);
 int check_slave_address(void);
 
 // Page/Frame Data

@@ -32,7 +32,7 @@
 
 // Calibration Response Timeout
 #ifndef ELAN_READ_CALI_RESP_TIMEOUT_MSEC
-#define	ELAN_READ_CALI_RESP_TIMEOUT_MSEC	30000
+#define	ELAN_READ_CALI_RESP_TIMEOUT_MSEC	10000 //30000
 #endif //ELAN_READ_CALI_RESP_TIMEOUT_MSEC
 
 // ELAN I2C-HID Buffer Size for Data
@@ -109,6 +109,13 @@ const int SOLUTION_ID_EKTH6315to3915P = 0x15;
 
 //6308
 const int SOLUTION_ID_EKTH6308x1	= 0x63;
+
+//7315
+const int SOLUTION_ID_EKTH7315x1	= 0x64;
+const int SOLUTION_ID_EKTH7315x2	= 0x65;
+
+//7318
+const int SOLUTION_ID_EKTH7318x1	= 0x67;
 
 //Define Boot Code High Byte for Specific ICs
 //5312b
@@ -232,6 +239,7 @@ int send_show_bulk_rom_data_command(unsigned short addr);
 int receive_bulk_rom_data(unsigned short *p_rom_data);
 
 // IAP Mode
+int send_write_flash_key_command(void);
 int send_enter_iap_command(void);
 int send_slave_address(void);
 

@@ -120,6 +120,44 @@ CALIBRATE_TOUCH_EXIT:
 	return err;
 }
 
+int calibrate_touch_with_error_retry(int retry_count)
+{
+    int err = TP_SUCCESS,
+        retry_index = 0;
+
+	// Make Sure Retry Count Positive
+	if(retry_count <= 0)
+        retry_count = 1;
+
+	for(retry_index = 0; retry_index < retry_count; retry_index++)
+	{
+		err = calibrate_touch();
+		if(err == TP_SUCCESS)
+		{
+			// Without any error => Break retry loop and continue.
+			break;
+		}
+
+		// With Error => Retry at most 3 times 
+		DEBUG_PRINTF("%s: [%d/3] Fail to Calibrate Touch! errno=0x%x.\r\n", __func__, retry_index+1, err);
+		if(retry_index == 2)
+		{
+			// Have retried for 3 times and can't fix it => Stop this function
+			ERROR_PRINTF("%s: Fail to Get Information Page! errno=0x%x.\r\n", __func__, err); 
+			goto CALIBRATE_TOUCH_WITH_ERROR_RETRY_EXIT;
+		}
+		else // retry_index = 0, 1
+		{
+			// wait 10ms
+			usleep(10*1000); 
+			continue;
+		}		
+	}
+
+CALIBRATE_TOUCH_WITH_ERROR_RETRY_EXIT:
+	return err;
+}
+
 // Hello Packet & BC Version
 int get_hello_packet_bc_version(unsigned char *p_hello_packet, unsigned short *p_bc_version)
 {
@@ -503,6 +541,7 @@ CHECK_SLAVE_ADDRESS_EXIT:
 	return err;
 }
 
+#if 0
 int switch_to_boot_code(void)
 {
 	int err = TP_SUCCESS;
@@ -514,6 +553,65 @@ int switch_to_boot_code(void)
 		ERROR_PRINTF("%s: Fail to Enter IAP Mode! errno=0x%x.\r\n", __func__, err);
 		goto SWITCH_TO_BOOT_CODE_EXIT;
 	}
+
+	// wait 15ms
+	usleep(15*1000); 
+
+	// Check Slave Address
+	err = check_slave_address();
+	if(err != TP_SUCCESS)
+	{
+		ERROR_PRINTF("%s: Fail to Check Slave Address! errno=0x%x.\r\n", __func__, err);
+		goto SWITCH_TO_BOOT_CODE_EXIT;
+	}
+
+	// Success
+	err = TP_SUCCESS;
+
+SWITCH_TO_BOOT_CODE_EXIT:
+	return err;
+}
+#endif //0
+
+int switch_to_boot_code(bool recovery)
+{
+	int err = TP_SUCCESS;
+
+	// Enter IAP Mode
+    if(recovery == false) // Normal IAP
+	{
+        // Write Flash Key
+        err = send_write_flash_key_command();
+        if(err != TP_SUCCESS)
+	    {
+		    ERROR_PRINTF("%s: [Normal IAP] Fail to Write Flash Key! errno=0x%x.\r\n", __func__, err);
+		    goto SWITCH_TO_BOOT_CODE_EXIT;
+	    }
+
+        // Enter IAP Mode
+	    err = send_enter_iap_command();
+	    if(err != TP_SUCCESS)
+	    {
+		    ERROR_PRINTF("%s: [Normal IAP] Fail to Enter IAP Mode! errno=0x%x.\r\n", __func__, err);
+		    goto SWITCH_TO_BOOT_CODE_EXIT;
+	    }
+    }
+    else // Recovery IAP
+    {
+        /* [Note] 2020/02/10
+		 * Do Not Send Enter IAP Command if Recovery Mode!
+		 * Just Send Write Flash Key Command!
+         * Migrate from V81.
+		 */
+
+        // Write Flash Key
+        err = send_write_flash_key_command();
+        if(err != TP_SUCCESS)
+	    {
+		    ERROR_PRINTF("%s: [Recovery IAP] Fail to Write Flash Key! errno=0x%x.\r\n", __func__, err);
+		    goto SWITCH_TO_BOOT_CODE_EXIT;
+	    }
+    }
 
 	// wait 15ms
 	usleep(15*1000); 
