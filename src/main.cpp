@@ -552,7 +552,8 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 	//
 	// Switch to Boot Code
 	//
-	err = switch_to_boot_code();
+	//err = switch_to_boot_code();
+    err = switch_to_boot_code(recovery);
 	if(err != TP_SUCCESS)
 	{
 		ERROR_PRINTF("%s: Fail to switch to Boot Code! errno=0x%x.\r\n", __func__, err);
