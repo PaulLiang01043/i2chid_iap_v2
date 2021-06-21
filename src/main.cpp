@@ -25,7 +25,7 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"2.f"
+#define	ELAN_TOOL_SW_VERSION 	"3.0"
 #endif //ELAN_TOOL_SW_VERSION
 
 // File Length
@@ -38,6 +38,20 @@
 #define DEFAULT_LOG_FILENAME	"/tmp/elan_i2chid_iap_result.txt"
 #endif //DEFAULT_LOG_FILENAME
 #endif //__SUPPORT_RESULT_LOG__
+
+/*
+ * Action Code of Firmware Update
+ */
+
+// Remark ID Check
+#ifndef ACTION_CODE_REMARK_ID_CHECK
+#define ACTION_CODE_REMARK_ID_CHECK		0x01
+#endif // ACTION_CODE_REMARK_ID_CHECK
+
+// Update Information Section
+#ifndef ACTION_CODE_INFORMATION_UPDATE
+#define ACTION_CODE_INFORMATION_UPDATE	0x02
+#endif // ACTION_CODE_INFORMATION_UPDATE
 
 /*******************************************
  * Macros
@@ -86,6 +100,9 @@ bool g_get_fw_info = false;
 // Re-Calibration (Re-K)
 bool g_rek = false;
 
+// Skip Action Code
+int g_skip_action_code = 0;
+
 #ifdef __SUPPORT_RESULT_LOG__
 // Result Log
 char g_log_file[FILE_NAME_LENGTH_MAX] = {0};
@@ -106,15 +123,16 @@ unsigned short g_fw_version = 0;
 
 // Parameter Option Settings
 #ifdef __SUPPORT_RESULT_LOG__
-const char* const short_options = "p:P:f:oikl:qdh";
+const char* const short_options = "p:P:f:s:oikl:qdh";
 #else
-const char* const short_options = "p:P:f:oikqdh";
+const char* const short_options = "p:P:f:s:oikqdh";
 #endif //__SUPPORT_RESULT_LOG__
 const struct option long_options[] =
 {
 	{ "pid",					1, NULL, 'p'},
 	{ "pid_hex",				1, NULL, 'P'},
 	{ "file_path",				1, NULL, 'f'},
+	{ "skip_action",			1, NULL, 's'},
 	{ "firmware_information",	0, NULL, 'i'},
 	{ "calibration",			0, NULL, 'k'},
 #ifdef __SUPPORT_RESULT_LOG__
@@ -140,6 +158,7 @@ int get_rom_data(unsigned short addr, bool recovery, unsigned short *p_data);
 
 // Remark ID Check
 int check_remark_id(bool recovery);
+int read_remark_id(bool recovery);
 
 // Update Firmware
 int update_firmware(char *filename, size_t filename_len, bool recovery);
@@ -415,6 +434,26 @@ CHECK_REMARK_ID_EXIT:
 	return err;
 }
 
+int read_remark_id(bool recovery)
+{
+	int err = TP_SUCCESS;
+	unsigned short remark_id = 0;
+
+	// Get Remark ID from ROM
+    err = get_rom_data(ELAN_INFO_ROM_REMARK_ID_MEMORY_ADDR, recovery, &remark_id);
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("%s: Fail to Read Remark ID from ROM! errno=0x%x.\r\n", __func__, err);
+        goto READ_REMARK_ID_EXIT;
+    }
+	DEBUG_PRINTF("Remark ID: %04x.\r\n", remark_id);
+
+    err = TP_SUCCESS;
+
+READ_REMARK_ID_EXIT:
+	return err;	
+}
+
 int get_hello_packet_with_error_retry(unsigned char *p_hello_packet, int retry_count)
 {
 	int err = TP_SUCCESS,
@@ -474,7 +513,9 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
                   bc_ver_high_byte = 0,
                   bc_ver_low_byte = 0,
                   iap_version = 0;
-    bool remark_id_check = false;
+    bool remark_id_check = false,
+		 skip_remark_id_check = false,
+		 skip_information_update = false;
 #if defined(__ENABLE_DEBUG__) && defined(__ENABLE_SYSLOG_DEBUG__)
     bool bDisableOutputBufferDebug = false;
 #endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
@@ -506,7 +547,16 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 	printf("--------------------------------\r\n");
 	printf("FW Path: \"%s\".\r\n", filename);
 
-	if(recovery == false) // Normal Mode
+	// Set Global Flag of Skip Action Code
+	if((g_skip_action_code & ACTION_CODE_REMARK_ID_CHECK) == ACTION_CODE_REMARK_ID_CHECK)
+		skip_remark_id_check = true;
+	if((g_skip_action_code & ACTION_CODE_INFORMATION_UPDATE) == ACTION_CODE_INFORMATION_UPDATE)
+		skip_information_update = true;
+	DEBUG_PRINTF("skip_remark_id_check: %s, skip_information_update: %s.\r\n", \
+										(skip_remark_id_check) ? "true" : "false", \
+										(skip_information_update) ? "true" : "false");
+	
+	if((recovery == false) && (skip_information_update == false)) // Normal Mode & Don't Skip Information (Section) Update
 	{
 		//
 		// Get & Update Information Page
@@ -518,7 +568,7 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 			goto UPDATE_FIRMWARE_EXIT;
 		}
 	}
-	
+
     //
     // Remark ID Check 
     //
@@ -533,19 +583,33 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
     {
         bc_ver_high_byte = (unsigned char)((g_bc_bc_version & 0xFF00) >> 8);
         bc_ver_low_byte  = (unsigned char)(g_bc_bc_version & 0x00FF);
-        if(bc_ver_high_byte != bc_ver_low_byte) // EX: A7 60
+       	if(bc_ver_high_byte != bc_ver_low_byte) // EX: A7 60
             remark_id_check = true;
 		DEBUG_PRINTF("BC Version: %04x, remark_id_check: %s.\r\n", g_bc_bc_version, (remark_id_check) ? "true" : "false");
     }
     if(remark_id_check == true)
 	{
-        DEBUG_PRINTF("[%s Mode] Check Remark ID...\r\n", (recovery) ? "Recovery" : "Normal");
-
-        err = check_remark_id(recovery);
-        if(err != TP_SUCCESS)
+		if(skip_remark_id_check == false) // Check Remark ID
 		{
-			ERROR_PRINTF("%s: Remark ID Check Failed! errno=0x%x.\r\n", __func__, err);
-			goto UPDATE_FIRMWARE_EXIT;
+        	DEBUG_PRINTF("[%s Mode] Check Remark ID...\r\n", (recovery) ? "Recovery" : "Normal");
+
+        	err = check_remark_id(recovery);
+        	if(err != TP_SUCCESS)
+			{
+				ERROR_PRINTF("%s: Remark ID Check Failed! errno=0x%x.\r\n", __func__, err);
+				goto UPDATE_FIRMWARE_EXIT;
+			}
+		}
+		else // Skip Reamrk ID Check, but read Remark ID
+		{
+			DEBUG_PRINTF("[%s Mode] Read Remark ID...\r\n", (recovery) ? "Recovery" : "Normal");
+			
+			err = read_remark_id(recovery);
+        	if(err != TP_SUCCESS)
+			{
+				ERROR_PRINTF("%s: Read Remark ID Failed! errno=0x%x.\r\n", __func__, err);
+				goto UPDATE_FIRMWARE_EXIT;
+			}
 		}
 	}
 
@@ -576,7 +640,7 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
     }
 #endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
 
-	if(recovery == false) // Normal Mode
+	if((recovery == false) && (skip_information_update == false)) // Normal Mode & Don't Skip Information (Section) Update
 	{
 		// Write Information Page
 		DEBUG_PRINTF("Update Information Page...\r\n");
@@ -605,7 +669,7 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 		memset(page_block_buf, 0, sizeof(page_block_buf));
 
 		// Get Bulk FW Page Data
-		if((block_index == (block_count - 1)) && ((block_count % 30) != 0)) // Last Block
+		if((block_index == (block_count - 1)) && ((page_count % 30) != 0)) // Last Block
 			block_page_num = page_count % 30; // Last Block Page Number
 		else
 			block_page_num = 30; // 30 Page
@@ -729,6 +793,11 @@ void show_help_information(void)
 	printf("-f <file_path>.\r\n");
 	printf("Ex: elan_iap -f firmware.ekt\r\n");
 	printf("Ex: elan_iap -f /tmp/firmware.ekt\r\n");
+
+	// Skip Action
+	printf("\n[Skip Action]\r\n");
+	printf("-s <action_code>.\r\n");
+	printf("Ex: elan_iap -s 1 \r\n");
 
 	// Firmware Information
 	printf("\n[Firmware Information]\r\n");
@@ -893,7 +962,8 @@ int process_parameter(int argc, char **argv)
         option_index = 0,
 		pid = 0,
 		pid_str_len = 0,
-		file_path_len = 0;
+		file_path_len = 0,
+		action_code = 0;
 	char file_path[FILE_NAME_LENGTH_MAX] = {0};
 
     while (1)
@@ -971,6 +1041,22 @@ int process_parameter(int argc, char **argv)
 				// Set Global File Path
                 strncpy(g_firmware_filename, file_path, strlen(file_path));
 				DEBUG_PRINTF("%s: Update FW: %s, File Path: \"%s\".\r\n", __func__, (g_update_fw) ? "Yes" : "No", g_firmware_filename);
+                break;
+
+			case 's': /* Skip Action */
+
+                // Make Sure Data Valid
+                action_code = atoi(optarg);
+                if (action_code < 0)
+                {
+                    ERROR_PRINTF("%s: Invalid Action Code: %d!\n", __func__, action_code);
+                    err = TP_ERR_INVALID_PARAM;
+                    goto PROCESS_PARAM_EXIT;
+                }
+
+                // Set Global ADC Type
+                g_skip_action_code = action_code;
+				DEBUG_PRINTF("%s: Skip Action Code: %d.\r\n", __func__, g_skip_action_code);
                 break;
 
 			case 'i': /* Firmware Information */
@@ -1085,10 +1171,14 @@ int main(int argc, char **argv)
 	// Process Parameter
 	err = process_parameter(argc, argv);
     if (err != TP_SUCCESS)
+	{
         goto EXIT;
+	}
 
-	if(g_quiet == false) // Disable Silent Mode
+	if (g_quiet == false) // Disable Silent Mode
+	{
 		printf("i2chid_iap v%s.\r\n", ELAN_TOOL_SW_VERSION);
+	}
 
 	/* Show Help Information */
 	if(g_help == true)
