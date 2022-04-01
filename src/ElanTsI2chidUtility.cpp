@@ -479,9 +479,13 @@ int send_read_rom_data_command(unsigned short addr, bool recovery, unsigned char
 
     // Assign info to appropriate variable
     if(recovery == false) // Normal Mode
+	{
         solution_id = info;
+	}
     else // Recovery Mode
+	{
         bc_version_high_byte = info;
+	}
 
 	/* Set Address & Length */
 	read_rom_data_cmd[1] = (addr & 0xFF00) >> 8;	//ADDR_H

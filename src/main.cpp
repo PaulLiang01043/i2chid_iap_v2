@@ -25,8 +25,13 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"3.0"
+#define	ELAN_TOOL_SW_VERSION 	"3.1"
 #endif //ELAN_TOOL_SW_VERSION
+
+// SW Release Date
+#ifndef ELAN_TOOL_SW_RELEASE_DATE
+#define ELAN_TOOL_SW_RELEASE_DATE	"2022-03-31"
+#endif //ELAN_TOOL_SW_RELEASE_DATE
 
 // File Length
 #ifndef FILE_NAME_LENGTH_MAX
@@ -512,7 +517,8 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 				  page_block_buf[ELAN_FIRMWARE_PAGE_SIZE * 30] = {0},
                   bc_ver_high_byte = 0,
                   bc_ver_low_byte = 0,
-                  iap_version = 0;
+                  iap_version = 0,
+				  solution_id = 0;
     bool remark_id_check = false,
 		 skip_remark_id_check = false,
 		 skip_information_update = false;
@@ -558,10 +564,13 @@ int update_firmware(char *filename, size_t filename_len, bool recovery)
 	
 	if((recovery == false) && (skip_information_update == false)) // Normal Mode & Don't Skip Information (Section) Update
 	{
+		// Get Solution ID
+		solution_id = HIGH_BYTE(g_fw_version); 	// Only Needed in Normal Mode
+
 		//
 		// Get & Update Information Page
 		//
-		err = get_and_update_info_page(info_page_buf, sizeof(info_page_buf));
+		err = get_and_update_info_page(solution_id, info_page_buf, sizeof(info_page_buf));
 		if(err != TP_SUCCESS)
 		{
 			ERROR_PRINTF("%s: Fail to get/update Inforamtion Page! errno=0x%x.\r\n", __func__, err);
@@ -1125,7 +1134,7 @@ int process_parameter(int argc, char **argv)
                 break;
 
             default:
-                ERROR_PRINTF("%s: Unknow Command!\r\n", __func__);
+                ERROR_PRINTF("%s: Unknown Command!\r\n", __func__);
                 break;
         }
     }
@@ -1177,7 +1186,7 @@ int main(int argc, char **argv)
 
 	if (g_quiet == false) // Disable Silent Mode
 	{
-		printf("i2chid_iap v%s.\r\n", ELAN_TOOL_SW_VERSION);
+		printf("i2chid_iap v%s %s.\r\n", ELAN_TOOL_SW_VERSION , ELAN_TOOL_SW_RELEASE_DATE);
 	}
 
 	/* Show Help Information */

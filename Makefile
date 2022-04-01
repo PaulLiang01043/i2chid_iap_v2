@@ -16,7 +16,7 @@ include_path := ./include
 
 CXX ?= g++ # Compiler: GCC C++ Compiler
 #CXX ?= arm-none-linux-gnueabi-g++ # Compiler: arm cross compiler
-CXXFLAGS = -Wall -ansi -O3 -g
+CXXFLAGS = -Wall -Wno-format-overflow -ansi -O3 -g
 CXXFLAGS += -D__ENABLE_DEBUG__
 CXXFLAGS += -D__ENABLE_OUTBUF_DEBUG__
 CXXFLAGS += -D__ENABLE_INBUF_DEBUG__

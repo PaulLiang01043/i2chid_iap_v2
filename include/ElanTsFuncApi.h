@@ -123,6 +123,6 @@ int write_page_data(unsigned char *page_buf, int page_buf_size);
 // Info. Page
 int get_info_page(unsigned char *info_page_buf, size_t info_page_buf_size);
 int get_info_page_with_error_retry(unsigned char *info_page_buf, size_t info_page_buf_size, int retry_count);
-int get_and_update_info_page(unsigned char *info_page_buf, size_t info_page_buf_size);
+int get_and_update_info_page(unsigned char solution_id, unsigned char *info_page_buf, size_t info_page_buf_size);
 
 #endif //_ELAN_TS_FUNC_API_H_

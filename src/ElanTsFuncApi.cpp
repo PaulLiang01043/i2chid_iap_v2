@@ -384,7 +384,7 @@ GET_INFO_PAGE_WITH_ERROR_RETRY_EXIT:
 	return err;
 }
 
-int get_and_update_info_page(unsigned char *info_page_buf, size_t info_page_buf_size)
+int get_and_update_info_page(unsigned char solution_id, unsigned char *info_page_buf, size_t info_page_buf_size)
 {
 	int err = TP_SUCCESS,
 		page_data_index = 0;
@@ -394,10 +394,11 @@ int get_and_update_info_page(unsigned char *info_page_buf, size_t info_page_buf_
 				  month		= 0,
 				  minute	= 0,
 				  hour		= 0;
-	unsigned short update_count		= 0,
-				   year				= 0,
-				   page_data		= 0,
-				   page_checksum	= 0;
+	unsigned short update_count				= 0,
+				   year						= 0,
+				   page_data				= 0,
+				   page_checksum			= 0,
+				   info_page_memory_address	= 0;
 	time_t cur_time;
 	struct tm *time_info;
 
@@ -469,9 +470,31 @@ int get_and_update_info_page(unsigned char *info_page_buf, size_t info_page_buf_
 
 	/* Update Inforamtion Page */
 
+	// [Note] 2022/03/31
+	// Support Info. Memory Space of Gen5 Series. 
+	// Since we start to adopt Gen5 touch into chrome project, momory space of 32k flash should be taked into consideration.
+	// Thus we have two type of information memory spaces:
+	// Gen5 Touch (with 32k flash): info. memory space starts from 0x8040.
+	// Gen6 Touch (with 64k flash): info. memory space starts from 0x0040.
+
+	// Configure Page Address of Info. Page
+	DEBUG_PRINTF("%s: solution_id=0x%02x.", __func__, solution_id);
+	if (/* 63XX Solution */
+		(solution_id == SOLUTION_ID_EKTH6315x1) || \
+		(solution_id == SOLUTION_ID_EKTH6315x2) || \
+		(solution_id == SOLUTION_ID_EKTH6315to5015M) || \
+		(solution_id == SOLUTION_ID_EKTH6315to3915P) || \
+		/* 73XX Solution */
+		(solution_id == SOLUTION_ID_EKTH7315x1) || \
+		(solution_id == SOLUTION_ID_EKTH7315x2) || \
+		(solution_id == SOLUTION_ID_EKTH7318x1))
+			info_page_memory_address = ELAN_INFO_PAGE_WRITE_MEMORY_ADDR;	// 63XX or 73XX: info_page_addr=0x0040
+	else // 53XX Solution
+			info_page_memory_address = ELAN_INFO_PAGE_MEMORY_ADDR;			// 53XX: info_page_addr=0x8040
+
 	// Set Page Address
-	temp_info_page_buf[0] = (unsigned char) (ELAN_INFO_PAGE_WRITE_MEMORY_ADDR & 0x00FF);			// Low  Byte of Address
-	temp_info_page_buf[1] = (unsigned char)((ELAN_INFO_PAGE_WRITE_MEMORY_ADDR & 0xFF00) >> 8);	// High Byte of Address 
+	temp_info_page_buf[0] = (unsigned char) (info_page_memory_address & 0x00FF);		// Low  Byte of Address
+	temp_info_page_buf[1] = (unsigned char)((info_page_memory_address & 0xFF00) >> 8);	// High Byte of Address 
 	
 	// Set Page Data
 	memcpy(&temp_info_page_buf[2], info_page_data_buf, ELAN_FIRMWARE_PAGE_DATA_SIZE);
@@ -483,7 +506,7 @@ int get_and_update_info_page(unsigned char *info_page_buf, size_t info_page_buf_
 		page_data = (temp_info_page_buf[page_data_index + 1] << 8) | temp_info_page_buf[page_data_index];
 		
 		// If page address is 0x0040, replace it with 0x8040.
-		if((page_data_index == 0) && (page_data == ELAN_INFO_PAGE_WRITE_MEMORY_ADDR))
+		if((page_data_index == 0) && (page_data == ELAN_INFO_PAGE_WRITE_MEMORY_ADDR)) // page_data[0]=0x0040
 			page_data = ELAN_INFO_PAGE_MEMORY_ADDR;
 		
 		// Update Checksum
