@@ -2,7 +2,6 @@
 //
 
 //#include "stdafx.h"
-#include "I2CHIDLinuxGet.h"
 #include <fcntl.h>      /* open */
 #include <unistd.h>     /* close */
 #include <sys/ioctl.h>  /* ioctl */
@@ -14,6 +13,7 @@
 #ifdef _WIN32 // Windows 32-bit Platform
 #include "win32_debug_utility.h"
 #endif // Debug Utility
+#include "I2CHIDLinuxGet.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // CI2CHIDLinuxGet::CI2CHIDGetLinux()
@@ -132,20 +132,20 @@ int CI2CHIDLinuxGet::GetDeviceHandle(int nVID, int nPID)
 
     // Look for elan hidraw device with specific PID
     nError = FindHidrawDevice(nVID, nPID, szHidrawDevPath);
-	if(nError == TP_ERR_NOT_FOUND_DEVICE)
-	{
-		DBG("%s: hidraw device (VID 0x%x, PID 0x%x) not found! Retry with PID 0x%x.", __func__, nVID, nPID, ELAN_USB_FORCE_CONNECT_PID);
-		nError = FindHidrawDevice(nVID, ELAN_USB_FORCE_CONNECT_PID, szHidrawDevPath);
-		if (nError != TP_SUCCESS)
+    if(nError == TP_ERR_NOT_FOUND_DEVICE)
+    {
+        DBG("%s: hidraw device (VID 0x%x, PID 0x%x) not found! Retry with PID 0x%x.", __func__, nVID, nPID, ELAN_USB_FORCE_CONNECT_PID);
+        nError = FindHidrawDevice(nVID, ELAN_USB_FORCE_CONNECT_PID, szHidrawDevPath);
+        if (nError != TP_SUCCESS)
         {
-			ERR("%s: hidraw device (VID 0x%x, PID 0x%x) not found!", __func__, nVID, ELAN_USB_FORCE_CONNECT_PID);
-        	nRet = TP_ERR_NOT_FOUND_DEVICE;
-        	goto GET_DEVICE_HANDLE_EXIT;
-    	}
-	}
+            ERR("%s: hidraw device (VID 0x%x, PID 0x%x) not found!", __func__, nVID, ELAN_USB_FORCE_CONNECT_PID);
+            nRet = TP_ERR_NOT_FOUND_DEVICE;
+            goto GET_DEVICE_HANDLE_EXIT;
+        }
+    }
     else if (nError != TP_SUCCESS)
     {
-		ERR("%s: hidraw device (VID 0x%x, PID 0x%x) not found!", __func__, nVID, nPID);
+        ERR("%s: hidraw device (VID 0x%x, PID 0x%x) not found!", __func__, nVID, nPID);
         nRet = TP_ERR_NOT_FOUND_DEVICE;
         goto GET_DEVICE_HANDLE_EXIT;
     }
@@ -277,7 +277,7 @@ int CI2CHIDLinuxGet::WriteCommand(unsigned char* pszCommandBuf, int nCommandLen,
     nRet = WriteRawBytes(m_szOutputBuf, nCommandLen + 3, nTimeout, nDevIdx);
     if (nRet != TP_SUCCESS)
     {
-        ERR("%s: Fail to Write Raw Bytes! errno=%d.", __func__, nRet);
+        ERR("%s: Fail to Write Raw Bytes! err=%d.", __func__, nRet);
     }
 
     return nRet;
@@ -445,14 +445,14 @@ int CI2CHIDLinuxGet::ReadData(unsigned char* pszDataBuf, int nDataLen, int nTime
 
     // Read 2-Byte Header & Command Data to Data Raw Buffer
     nRet = ReadRawBytes(m_szInputBuf, nDataLen + 2, nTimeout, nDevIdx);
-	if (nRet == TP_ERR_TIMEOUT)
-	{
-		DBG("%s: Fail to Read Raw Bytes! errno=0x%x.", __func__, nRet);
+    if (nRet == TP_ERR_TIMEOUT)
+    {
+        DBG("%s: Fail to Read Raw Bytes! err=0x%x.", __func__, nRet);
         goto READ_DATA_EXIT;
-	}
+    }
     else if (nRet != TP_SUCCESS)
     {
-        ERR("%s: Fail to Read Raw Bytes! errno=0x%x.", __func__, nRet);
+        ERR("%s: Fail to Read Raw Bytes! err=0x%x.", __func__, nRet);
         goto READ_DATA_EXIT;
     }
 
@@ -497,9 +497,9 @@ int CI2CHIDLinuxGet::ReadGhostData(unsigned char* pszDataBuf, int nDataLen, int 
 
     // Read 2-Byte Header & Command Data to Data Raw Buffer
     nRet = ReadRawBytes(m_szInputBuf, nDataLen + 2, nTimeout, nDevIdx);
-	if (nRet != TP_SUCCESS)
+    if (nRet != TP_SUCCESS)
     {
-        ERR("%s: Fail to Read Raw Bytes! errno=0x%x.", __func__, nRet);
+        ERR("%s: Fail to Read Raw Bytes! err=0x%x.", __func__, nRet);
         goto READ_DATA_EXIT;
     }
 
@@ -540,33 +540,33 @@ READ_DATA_EXIT:
 
 int	CI2CHIDLinuxGet::GetDevVidPid(unsigned int* p_nVid, unsigned int* p_nPid, int nDevIdx)
 {
-	int nRet = TP_SUCCESS;
+    int nRet = TP_SUCCESS;
 
-	// Make Sure Input Pointers Valid
-	if((p_nVid == NULL) || (p_nPid == NULL))
-	{
-		ERR("%s: Input Parameters Invalid! (p_nVid=%p, p_nPid=%p)\r\n", __func__, p_nVid, p_nPid);
-		nRet = TP_ERR_INVALID_PARAM;
-		goto GET_DEV_VID_PID_EXIT;
-	}
+    // Make Sure Input Pointers Valid
+    if((p_nVid == NULL) || (p_nPid == NULL))
+    {
+        ERR("%s: Input Parameters Invalid! (p_nVid=%p, p_nPid=%p)\r\n", __func__, p_nVid, p_nPid);
+        nRet = TP_ERR_INVALID_PARAM;
+        goto GET_DEV_VID_PID_EXIT;
+    }
 
-	// Make Sure Device Found
-	if((m_usVID == 0) && (m_usPID == 0))
-	{
-		ERR("%s: I2C-HID device has never been found!\r\n", __func__);
-		nRet = TP_ERR_NOT_FOUND_DEVICE;
-		goto GET_DEV_VID_PID_EXIT;
-	}
+    // Make Sure Device Found
+    if((m_usVID == 0) && (m_usPID == 0))
+    {
+        ERR("%s: I2C-HID device has never been found!\r\n", __func__);
+        nRet = TP_ERR_NOT_FOUND_DEVICE;
+        goto GET_DEV_VID_PID_EXIT;
+    }
 
-	// Set PID & VID
-	*p_nVid = m_usVID;
-	*p_nPid = m_usPID;
+    // Set PID & VID
+    *p_nVid = m_usVID;
+    *p_nPid = m_usPID;
 
-	// Success
-	nRet = TP_SUCCESS;
+    // Success
+    nRet = TP_SUCCESS;
 
 GET_DEV_VID_PID_EXIT:
-	return nRet;
+    return nRet;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -614,25 +614,25 @@ const char* CI2CHIDLinuxGet::bus_str(int bus)
 {
     switch (bus)
     {
-        case BUS_USB:
-            return "USB";
+    case BUS_USB:
+        return "USB";
 
-        case BUS_HIL:
-            return "HIL";
+    case BUS_HIL:
+        return "HIL";
 
-        case BUS_BLUETOOTH:
-            return "Bluetooth";
+    case BUS_BLUETOOTH:
+        return "Bluetooth";
 
 #if 0 // Disable this convert since the definition is not include in input.h of android sdk.
-        case BUS_VIRTUAL:
-            return "Virtual";
+    case BUS_VIRTUAL:
+        return "Virtual";
 #endif // 0
 
-        case BUS_I2C:
-            return "I2C";
+    case BUS_I2C:
+        return "I2C";
 
-        default:
-            return "Other";
+    default:
+        return "Other";
     }
 }
 
@@ -684,7 +684,7 @@ int CI2CHIDLinuxGet::FindHidrawDevice(int nVID, int nPID, char *pszDevicePath)
         nError = open(szFile, O_RDWR | O_NONBLOCK);
         if (nError < 0)
         {
-            DBG("%s: Fail to Open Device %s! errno=%d.", pDirEntry->d_name, nError);
+            DBG("%s: Fail to Open Device %s! errno=%d.", __func__, pDirEntry->d_name, nError);
             continue;
         }
         nFd = nError;
@@ -699,8 +699,8 @@ int CI2CHIDLinuxGet::FindHidrawDevice(int nVID, int nPID, char *pszDevicePath)
             DBG("  product: 0x%04hx", info.product);
 
             // Force touch device to connect if bustype=0x03(BUS_I2C), VID=0x4f3, and PID=0x0
-            if ((info.bustype == BUS_I2C) && 
-				(info.vendor == ELAN_USB_VID) /* nVID = usb_dev_desc.idVendor = ELAN_USB_VID */  &&
+            if ((info.bustype == BUS_I2C) &&
+                (info.vendor == ELAN_USB_VID) /* nVID = usb_dev_desc.idVendor = ELAN_USB_VID */  &&
                 (nPID == ELAN_USB_FORCE_CONNECT_PID))
             {
                 // Use found PID from Hid-Raw
@@ -711,8 +711,8 @@ int CI2CHIDLinuxGet::FindHidrawDevice(int nVID, int nPID, char *pszDevicePath)
             if ((info.vendor == nVID) && (info.product == nPID))
             {
                 DBG("%s: Found hidraw device with VID 0x%x and PID 0x%x!", __func__, nVID, nPID);
-				m_usVID = (unsigned short) nVID;
-				m_usPID = (unsigned short) nPID;
+                m_usVID = (unsigned short) nVID;
+                m_usPID = (unsigned short) nPID;
                 memcpy(pszDevicePath, szFile, sizeof(szFile));
                 bFound = true;
             }

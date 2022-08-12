@@ -24,9 +24,9 @@
 *
 * Date: 2013/06/26
 **************************************************************************/
+#include <cstdio>
 #include "BuildConfig.h"
 #include "ErrCode.h"
-#include <cstdio>
 
 //////////////////////////////////////////////////////////////////////
 // Definitions
@@ -34,7 +34,7 @@
 
 // Interface Type
 const int INTF_TYPE_NONE						= 0;
-const int INTF_TYPE_HID_WINDOWS				= 1;
+const int INTF_TYPE_HID_WINDOWS					= 1;
 const int INTF_TYPE_HID_LINUX					= 2;
 const int INTF_TYPE_I2C_LINUX					= 3;
 const int INTF_TYPE_I2CHID_LINUX				= 4;

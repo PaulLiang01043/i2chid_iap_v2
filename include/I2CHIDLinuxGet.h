@@ -131,7 +131,7 @@ public:
     int GetOutBufferSize(void);
 
     // PID
-	int	GetDevVidPid(unsigned int* p_nVid, unsigned int* p_nPid, int nDevIdx = 0);
+    int	GetDevVidPid(unsigned int* p_nVid, unsigned int* p_nPid, int nDevIdx = 0);
 
 protected:
     // Basic Functions

@@ -77,6 +77,11 @@
 #define TP_ERR_DATA_NOT_FOUND				0x0106
 #endif //TP_ERR_FILE_NOT_FOUND
 
+/** File I/O Error  **/
+#ifndef TP_ERR_FILE_IO_ERROR
+#define TP_ERR_FILE_IO_ERROR				0x0107
+#endif //TP_ERR_FILE_IO_ERROR
+
 /* Unknown Device Type */
 #ifndef TP_UNKNOWN_DEVICE_TYPE
 #define TP_UNKNOWN_DEVICE_TYPE				0x010f

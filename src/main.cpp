@@ -12,12 +12,13 @@
 #include <stdint.h>
 #include <string.h>
 #include <getopt.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include "I2CHIDLinuxGet.h"
+#include "ElanTsI2chidUtility.h"
 #include "ElanTsFuncApi.h"
-#include "ElanTsIapFileIoUtility.h"
+#include "ElanTsFwFileIoUtility.h"
+#include "ElanTsFwUpdateFlow.h"
+#include "ElanGen8TsI2chidHwParameters.h"
+#include "ElanGen8TsFwUpdateFlow.h"
 
 /***************************************************
  * Definitions
@@ -25,18 +26,13 @@
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"3.1"
+#define	ELAN_TOOL_SW_VERSION 	"4.0"
 #endif //ELAN_TOOL_SW_VERSION
 
 // SW Release Date
 #ifndef ELAN_TOOL_SW_RELEASE_DATE
-#define ELAN_TOOL_SW_RELEASE_DATE	"2022-03-31"
+#define ELAN_TOOL_SW_RELEASE_DATE	"2022-08-12"
 #endif //ELAN_TOOL_SW_RELEASE_DATE
-
-// File Length
-#ifndef FILE_NAME_LENGTH_MAX
-#define FILE_NAME_LENGTH_MAX	256
-#endif //FILE_NAME_LENGTH_MAX
 
 #ifdef __SUPPORT_RESULT_LOG__
 #ifndef DEFAULT_LOG_FILENAME
@@ -44,31 +40,9 @@
 #endif //DEFAULT_LOG_FILENAME
 #endif //__SUPPORT_RESULT_LOG__
 
-/*
- * Action Code of Firmware Update
- */
-
-// Remark ID Check
-#ifndef ACTION_CODE_REMARK_ID_CHECK
-#define ACTION_CODE_REMARK_ID_CHECK		0x01
-#endif // ACTION_CODE_REMARK_ID_CHECK
-
-// Update Information Section
-#ifndef ACTION_CODE_INFORMATION_UPDATE
-#define ACTION_CODE_INFORMATION_UPDATE	0x02
-#endif // ACTION_CODE_INFORMATION_UPDATE
-
-/*******************************************
- * Macros
- ******************************************/
-
-#ifndef HIGH_BYTE
-#define HIGH_BYTE(data_word)    ((unsigned char)((data_word & 0xFF00) >> 8))
-#endif //HIGH_BYTE
-
-#ifndef LOW_BYTE
-#define LOW_BYTE(data_word)    ((unsigned char)(data_word & 0x00FF))
-#endif //LOW_BYTE
+/***************************************************
+ * Feature Configurations
+ ***************************************************/
 
 /*******************************************
  * Global Variables Declaration
@@ -96,8 +70,6 @@ bool g_update_fw = false;
 
 // Firmware File Information
 char g_firmware_filename[FILE_NAME_LENGTH_MAX] = {0};
-int  g_firmware_fd = -1;
-int  g_firmware_size = 0;
 
 // Firmware Inforamtion
 bool g_get_fw_info = false;
@@ -113,18 +85,11 @@ int g_skip_action_code = 0;
 char g_log_file[FILE_NAME_LENGTH_MAX] = {0};
 #endif //__SUPPORT_RESULT_LOG__
 
-// Silent Mode (Quiet)
-bool g_quiet = false;
+// Silent Mode
+bool g_silent_mode = false;
 
 // Help Info.
 bool g_help = false;
-
-// BC Version
-unsigned short g_bc_bc_version = 0,
-               g_fw_bc_version = 0;
-
-// FW Version
-unsigned short g_fw_version = 0;
 
 // Parameter Option Settings
 #ifdef __SUPPORT_RESULT_LOG__
@@ -134,50 +99,34 @@ const char* const short_options = "p:P:f:s:oikqdh";
 #endif //__SUPPORT_RESULT_LOG__
 const struct option long_options[] =
 {
-	{ "pid",					1, NULL, 'p'},
-	{ "pid_hex",				1, NULL, 'P'},
-	{ "file_path",				1, NULL, 'f'},
-	{ "skip_action",			1, NULL, 's'},
-	{ "firmware_information",	0, NULL, 'i'},
-	{ "calibration",			0, NULL, 'k'},
+    { "pid",					1, NULL, 'p'},
+    { "pid_hex",				1, NULL, 'P'},
+    { "file_path",				1, NULL, 'f'},
+    { "skip_action",			1, NULL, 's'},
+    { "firmware_information",	0, NULL, 'i'},
+    { "calibration",			0, NULL, 'k'},
 #ifdef __SUPPORT_RESULT_LOG__
-	{ "log_filename",			1, NULL, 'l'},
+    { "log_filename",			1, NULL, 'l'},
 #endif //__SUPPORT_RESULT_LOG__
-	{ "quiet",					0, NULL, 'q'},
+    { "quiet",					0, NULL, 'q'},
     { "debug",					0, NULL, 'd'},
-	{ "help",					0, NULL, 'h'},
+    { "help",					0, NULL, 'h'},
 };
 
 /*******************************************
  * Function Prototype
  ******************************************/
 
-// Firmware Information
-int get_firmware_information(bool quiet /* Silent Mode */);
-
-// Hello Packet
-int get_hello_packet_with_error_retry(unsigned char *p_hello_packet, int retry_count);
-
-// ROM Data
-int get_rom_data(unsigned short addr, bool recovery, unsigned short *p_data);
-
-// Remark ID Check
-int check_remark_id(bool recovery);
-int read_remark_id(bool recovery);
-
-// Update Firmware
-int update_firmware(char *filename, size_t filename_len, bool recovery);
-
 #ifdef __SUPPORT_RESULT_LOG__
 // Result Log
-int generate_result_log(char *filename, size_t filename_len, bool result); 
+int generate_result_log(char *filename, size_t filename_len, bool result);
 #endif //__SUPPORT_RESULT_LOG__
 
 // Help
 void show_help_information(void);
 
 // HID Raw I/O Function
-int __hidraw_write(unsigned char* buf, int len, int timeout_ms); 
+int __hidraw_write(unsigned char* buf, int len, int timeout_ms);
 int __hidraw_read(unsigned char* buf, int len, int timeout_ms);
 
 // Abstract Device I/O Function
@@ -199,66 +148,66 @@ int main(int argc, char **argv);
 
 int __hidraw_write(unsigned char* buf, int len, int timeout_ms)
 {
-	int nRet = TP_SUCCESS;
+    int nRet = TP_SUCCESS;
 
-	if(g_pIntfGet == NULL)
-	{
-		nRet = TP_ERR_COMMAND_NOT_SUPPORT;
-		goto __HIDRAW_WRITE_EXIT;
-	}
+    if(g_pIntfGet == NULL)
+    {
+        nRet = TP_ERR_COMMAND_NOT_SUPPORT;
+        goto __HIDRAW_WRITE_EXIT;
+    }
 
-	nRet = g_pIntfGet->WriteRawBytes(buf, len, timeout_ms);
+    nRet = g_pIntfGet->WriteRawBytes(buf, len, timeout_ms);
 
 __HIDRAW_WRITE_EXIT:
-	return nRet;
+    return nRet;
 }
 
 int __hidraw_read(unsigned char* buf, int len, int timeout_ms)
 {
-	int nRet = TP_SUCCESS;
+    int nRet = TP_SUCCESS;
 
-	if(g_pIntfGet == NULL)
-	{
-		nRet = TP_ERR_COMMAND_NOT_SUPPORT;
-		goto __HIDRAW_READ_EXIT;
-	}
+    if(g_pIntfGet == NULL)
+    {
+        nRet = TP_ERR_COMMAND_NOT_SUPPORT;
+        goto __HIDRAW_READ_EXIT;
+    }
 
-	nRet = g_pIntfGet->ReadRawBytes(buf, len, timeout_ms);
+    nRet = g_pIntfGet->ReadRawBytes(buf, len, timeout_ms);
 
 __HIDRAW_READ_EXIT:
-	return nRet;
+    return nRet;
 }
 
 int __hidraw_write_command(unsigned char* buf, int len, int timeout_ms)
 {
-	int nRet = TP_SUCCESS;
+    int nRet = TP_SUCCESS;
 
-	if(g_pIntfGet == NULL)
-	{
-		nRet = TP_ERR_COMMAND_NOT_SUPPORT;
-		goto __HIDRAW_WRITE_EXIT;
-	}
+    if(g_pIntfGet == NULL)
+    {
+        nRet = TP_ERR_COMMAND_NOT_SUPPORT;
+        goto __HIDRAW_WRITE_EXIT;
+    }
 
-	nRet = g_pIntfGet->WriteCommand(buf, len, timeout_ms);
+    nRet = g_pIntfGet->WriteCommand(buf, len, timeout_ms);
 
 __HIDRAW_WRITE_EXIT:
-	return nRet;
+    return nRet;
 }
 
 int __hidraw_read_data(unsigned char* buf, int len, int timeout_ms)
 {
-	int nRet = TP_SUCCESS;
+    int nRet = TP_SUCCESS;
 
-	if(g_pIntfGet == NULL)
-	{
-		nRet = TP_ERR_COMMAND_NOT_SUPPORT;
-		goto __HIDRAW_READ_EXIT;
-	}
+    if(g_pIntfGet == NULL)
+    {
+        nRet = TP_ERR_COMMAND_NOT_SUPPORT;
+        goto __HIDRAW_READ_EXIT;
+    }
 
-	nRet = g_pIntfGet->ReadData(buf, len, timeout_ms);
+    nRet = g_pIntfGet->ReadData(buf, len, timeout_ms);
 
 __HIDRAW_READ_EXIT:
-	return nRet;
+    return nRet;
 }
 
 /***************************************************
@@ -285,444 +234,18 @@ int read_data(unsigned char *data_buf, int len, int timeout_ms)
 
 int write_vendor_cmd(unsigned char *cmd_buf, int len, int timeout_ms)
 {
-	unsigned char vendor_cmd_buf[ELAN_I2CHID_OUTPUT_BUFFER_SIZE] = {0};
+    unsigned char vendor_cmd_buf[ELAN_I2CHID_OUTPUT_BUFFER_SIZE] = {0};
 
-	// Add HID Header
-	vendor_cmd_buf[0] = ELAN_HID_OUTPUT_REPORT_ID;
-	memcpy(&vendor_cmd_buf[1], cmd_buf, len);
+    // Add HID Header
+    vendor_cmd_buf[0] = ELAN_HID_OUTPUT_REPORT_ID;
+    memcpy(&vendor_cmd_buf[1], cmd_buf, len);
 
-	return __hidraw_write(vendor_cmd_buf, sizeof(vendor_cmd_buf), timeout_ms);
+    return __hidraw_write(vendor_cmd_buf, sizeof(vendor_cmd_buf), timeout_ms);
 }
 
 /*******************************************
  * Function Implementation
  ******************************************/
-
-int get_firmware_information(bool quiet /* Silent Mode */)
-{
-	int err = TP_SUCCESS;
-    unsigned short fw_id = 0,
-                   fw_version = 0,
-                   test_version = 0,
-                   bc_version = 0;
-
-	if(quiet == true) // Enable Silent Mode
-	{
-		// Firmware Version
-        err = get_fw_version(&fw_version);
-		if(err != TP_SUCCESS)
-			goto GET_FW_INFO_EXIT;
-        printf("%04x", fw_version);
-	}
-	else // Disable Silent Mode
-	{
-		printf("--------------------------------\r\n");
-
-		// FW ID
-        err = get_firmware_id(&fw_id);
-		if(err != TP_SUCCESS)
-			goto GET_FW_INFO_EXIT;
-        printf("Firmware ID: %02x.%02x\r\n", HIGH_BYTE(fw_id), LOW_BYTE(fw_id));
-
-		// Firmware Version
-        err = get_fw_version(&fw_version);
-		if(err != TP_SUCCESS)
-			goto GET_FW_INFO_EXIT;
-        printf("Firmware Version: %02x.%02x\r\n", HIGH_BYTE(fw_version), LOW_BYTE(fw_version));
-        g_fw_version = fw_version;
-
-		// Test Version
-        err = get_test_version(&test_version);
-		if(err != TP_SUCCESS)
-			goto GET_FW_INFO_EXIT;
-        printf("Test Version: %02x.%02x\r\n", HIGH_BYTE(test_version), LOW_BYTE(test_version));
-
-		// Boot Code Version
-        err = get_boot_code_version(&bc_version);
-		if(err != TP_SUCCESS)
-			goto GET_FW_INFO_EXIT;
-        printf("Boot Code Version: %02x.%02x\r\n", HIGH_BYTE(bc_version), LOW_BYTE(bc_version));
-        g_fw_bc_version = bc_version;
-	}
-
-GET_FW_INFO_EXIT:
-	return err;
-}
-
-// ROM Data
-int get_rom_data(unsigned short addr, bool recovery, unsigned short *p_data)
-{
-	int err = TP_SUCCESS;
-    unsigned short word_data = 0;
-    unsigned char  solution_id = 0,
-                   bc_version_high_byte = 0;
-
-	// Check if Parameter Invalid
-    if (p_data == NULL)
-    {
-        ERROR_PRINTF("%s: Invalid Parameter! (p_data=0x%p)\r\n", __func__, p_data);
-        err = TP_ERR_INVALID_PARAM;
-        goto GET_ROM_DATA_EXIT;
-    }
-
-    // Get Solution ID & High Byte of Boot Code
-    solution_id = HIGH_BYTE(g_fw_version);
-    bc_version_high_byte = HIGH_BYTE(g_bc_bc_version);
-    DEBUG_PRINTF("Solution ID: %02x, High Byte of Boot Code Version: %02x.\r\n", solution_id, bc_version_high_byte);
-
-    /* Read Data from ROM */
-    err = send_read_rom_data_command(addr, recovery, (recovery) ? bc_version_high_byte : solution_id);
-    if(err != TP_SUCCESS)
-    {
-        ERROR_PRINTF("%s: Fail to Send Read ROM Data Command! errno=0x%x.\r\n", __func__, err);
-        goto GET_ROM_DATA_EXIT;
-    }
-
-    err = receive_rom_data(&word_data);
-    if(err != TP_SUCCESS)
-    {
-        ERROR_PRINTF("%s: Fail to Receive ROM Data! errno=0x%x.\r\n", __func__, err);
-        goto GET_ROM_DATA_EXIT;
-    }
-
-    *p_data = word_data;
-    err = TP_SUCCESS;
-
-GET_ROM_DATA_EXIT:
-	return err; 
-}
-
-int check_remark_id(bool recovery)
-{
-	int err = TP_SUCCESS;
-	unsigned short remark_id_from_rom = 0,
-                   remark_id_from_fw  = 0;
-
-    // Get Remark ID from ROM
-    err = get_rom_data(ELAN_INFO_ROM_REMARK_ID_MEMORY_ADDR, recovery, &remark_id_from_rom);
-    if(err != TP_SUCCESS)
-    {
-        ERROR_PRINTF("%s: Fail to Get Remark ID from ROM! errno=0x%x.\r\n", __func__, err);
-        goto CHECK_REMARK_ID_EXIT;
-    }
-
-    // Read Remark ID from Firmware
-    err = get_remark_id_from_firmware(&remark_id_from_fw);
-    if(err != TP_SUCCESS)
-    {
-        ERROR_PRINTF("%s: Fail to Get Remark ID from Firmware! errno=0x%x.\r\n", __func__, err);
-        goto CHECK_REMARK_ID_EXIT;
-    }
-
-    DEBUG_PRINTF("Remark ID from ROM: %04x, Remark ID from FW: %04x.\r\n", remark_id_from_rom, remark_id_from_fw);
-
-    // Just Pass if Non-Remark IC
-    if(remark_id_from_rom == ELAN_REMARK_ID_OF_NON_REMARK_IC)
-    {
-        err = TP_SUCCESS;
-        goto CHECK_REMARK_ID_EXIT;
-    }
-    else // Remark IC
-    {
-        // Validate Remark ID 
-	    if(remark_id_from_rom != remark_id_from_fw) 
-	    {
-            ERROR_PRINTF("%s: Remark ID Mismatched! (Remark ID from ROM: %04x, Remark ID from FW: %04x)\r\n", __func__, remark_id_from_rom, remark_id_from_fw);
-		    err = TP_ERR_DATA_MISMATCHED;
-            goto CHECK_REMARK_ID_EXIT;
-	    }
-    }
-
-    err = TP_SUCCESS;
-
-CHECK_REMARK_ID_EXIT:
-	return err;
-}
-
-int read_remark_id(bool recovery)
-{
-	int err = TP_SUCCESS;
-	unsigned short remark_id = 0;
-
-	// Get Remark ID from ROM
-    err = get_rom_data(ELAN_INFO_ROM_REMARK_ID_MEMORY_ADDR, recovery, &remark_id);
-    if(err != TP_SUCCESS)
-    {
-        ERROR_PRINTF("%s: Fail to Read Remark ID from ROM! errno=0x%x.\r\n", __func__, err);
-        goto READ_REMARK_ID_EXIT;
-    }
-	DEBUG_PRINTF("Remark ID: %04x.\r\n", remark_id);
-
-    err = TP_SUCCESS;
-
-READ_REMARK_ID_EXIT:
-	return err;	
-}
-
-int get_hello_packet_with_error_retry(unsigned char *p_hello_packet, int retry_count)
-{
-	int err = TP_SUCCESS,
-		retry_index = 0;
-
-	// Make Sure Page Data Buffer Valid
-	if(p_hello_packet == NULL)
-	{
-		ERROR_PRINTF("%s: NULL Page Data Buffer!\r\n", __func__);
-		err = TP_ERR_INVALID_PARAM;
-		goto GET_HELLO_PACKET_WITH_ERROR_RETRY_EXIT;
-	}
-
-	// Make Sure Retry Count Positive
-	if(retry_count <= 0)
-		retry_count = 1;
-
-	for(retry_index = 0; retry_index < retry_count; retry_index++)
-	{
-        err = get_hello_packet_bc_version(p_hello_packet, &g_bc_bc_version);
-		if(err == TP_SUCCESS)
-		{
-			// Without any error => Break retry loop and continue.
-			break;
-		}
-
-		// With Error => Retry at most 3 times 
-		DEBUG_PRINTF("%s: [%d/3] Fail to Get Hello Packet! errno=0x%x.\r\n", __func__, retry_index+1, err);
-		if(retry_index == 2)
-		{
-			// Have retried for 3 times and can't fix it => Stop this function 
-			ERROR_PRINTF("%s: Fail to Get Hello Packet! errno=0x%x.\r\n", __func__, err);
-			goto GET_HELLO_PACKET_WITH_ERROR_RETRY_EXIT;
-		}
-		else // retry_index = 0, 1
-		{
-			// wait 50ms
-			usleep(50*1000); 
-
-			continue;
-		}		
-	}
-
-GET_HELLO_PACKET_WITH_ERROR_RETRY_EXIT:
-	return err;
-}
-
-int update_firmware(char *filename, size_t filename_len, bool recovery)
-{
-	int err = TP_SUCCESS,
-		page_count = 0,
-		block_count = 0,
-		block_index = 0,
-		block_page_num = 0;
-	unsigned char info_page_buf[ELAN_FIRMWARE_PAGE_SIZE] = {0},
-				  page_block_buf[ELAN_FIRMWARE_PAGE_SIZE * 30] = {0},
-                  bc_ver_high_byte = 0,
-                  bc_ver_low_byte = 0,
-                  iap_version = 0,
-				  solution_id = 0;
-    bool remark_id_check = false,
-		 skip_remark_id_check = false,
-		 skip_information_update = false;
-#if defined(__ENABLE_DEBUG__) && defined(__ENABLE_SYSLOG_DEBUG__)
-    bool bDisableOutputBufferDebug = false;
-#endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
-
-	// Make Sure Filename Valid
-	if(filename == NULL)
-	{
-		ERROR_PRINTF("%s: Null String of Filename!\r\n", __func__);
-		err = TP_ERR_INVALID_PARAM;
-		goto UPDATE_FIRMWARE_EXIT;
-	}
-
-	// Make Sure Filename Length Valid
-	if(filename_len == 0)
-	{
-		ERROR_PRINTF("%s: Filename String Length is Zero!\r\n", __func__);
-		err = TP_ERR_INVALID_PARAM;
-		goto UPDATE_FIRMWARE_EXIT;
-	}
-
-	// Make Sure File Exist
-	if(access(filename, F_OK) == -1)
-	{
-		ERROR_PRINTF("%s: File \"%s\" does not exist!\r\n", __func__, filename);
-		err = TP_ERR_FILE_NOT_FOUND;
-		goto UPDATE_FIRMWARE_EXIT;
-	}
-
-	printf("--------------------------------\r\n");
-	printf("FW Path: \"%s\".\r\n", filename);
-
-	// Set Global Flag of Skip Action Code
-	if((g_skip_action_code & ACTION_CODE_REMARK_ID_CHECK) == ACTION_CODE_REMARK_ID_CHECK)
-		skip_remark_id_check = true;
-	if((g_skip_action_code & ACTION_CODE_INFORMATION_UPDATE) == ACTION_CODE_INFORMATION_UPDATE)
-		skip_information_update = true;
-	DEBUG_PRINTF("skip_remark_id_check: %s, skip_information_update: %s.\r\n", \
-										(skip_remark_id_check) ? "true" : "false", \
-										(skip_information_update) ? "true" : "false");
-	
-	if((recovery == false) && (skip_information_update == false)) // Normal Mode & Don't Skip Information (Section) Update
-	{
-		// Get Solution ID
-		solution_id = HIGH_BYTE(g_fw_version); 	// Only Needed in Normal Mode
-
-		//
-		// Get & Update Information Page
-		//
-		err = get_and_update_info_page(solution_id, info_page_buf, sizeof(info_page_buf));
-		if(err != TP_SUCCESS)
-		{
-			ERROR_PRINTF("%s: Fail to get/update Inforamtion Page! errno=0x%x.\r\n", __func__, err);
-			goto UPDATE_FIRMWARE_EXIT;
-		}
-	}
-
-    //
-    // Remark ID Check 
-    //
-    if(recovery == false) // Normal Mode
-    {
-        iap_version = (unsigned char)(g_fw_bc_version & 0x00FF);
-		if(iap_version >= 0x60)
-			remark_id_check = true;
-		DEBUG_PRINTF("BC Version: %04x, remark_id_check: %s.\r\n", g_fw_bc_version, (remark_id_check) ? "true" : "false");
-    }
-    else // Recovery Mode
-    {
-        bc_ver_high_byte = (unsigned char)((g_bc_bc_version & 0xFF00) >> 8);
-        bc_ver_low_byte  = (unsigned char)(g_bc_bc_version & 0x00FF);
-       	if(bc_ver_high_byte != bc_ver_low_byte) // EX: A7 60
-            remark_id_check = true;
-		DEBUG_PRINTF("BC Version: %04x, remark_id_check: %s.\r\n", g_bc_bc_version, (remark_id_check) ? "true" : "false");
-    }
-    if(remark_id_check == true)
-	{
-		if(skip_remark_id_check == false) // Check Remark ID
-		{
-        	DEBUG_PRINTF("[%s Mode] Check Remark ID...\r\n", (recovery) ? "Recovery" : "Normal");
-
-        	err = check_remark_id(recovery);
-        	if(err != TP_SUCCESS)
-			{
-				ERROR_PRINTF("%s: Remark ID Check Failed! errno=0x%x.\r\n", __func__, err);
-				goto UPDATE_FIRMWARE_EXIT;
-			}
-		}
-		else // Skip Reamrk ID Check, but read Remark ID
-		{
-			DEBUG_PRINTF("[%s Mode] Read Remark ID...\r\n", (recovery) ? "Recovery" : "Normal");
-			
-			err = read_remark_id(recovery);
-        	if(err != TP_SUCCESS)
-			{
-				ERROR_PRINTF("%s: Read Remark ID Failed! errno=0x%x.\r\n", __func__, err);
-				goto UPDATE_FIRMWARE_EXIT;
-			}
-		}
-	}
-
-	//
-	// Switch to Boot Code
-	//
-	//err = switch_to_boot_code();
-    err = switch_to_boot_code(recovery);
-	if(err != TP_SUCCESS)
-	{
-		ERROR_PRINTF("%s: Fail to switch to Boot Code! errno=0x%x.\r\n", __func__, err);
-		goto UPDATE_FIRMWARE_EXIT;
-	}
-
-	printf("Start FW Update Process...\r\n");
-
-	// 
-	// Update with FW Pages 
-	//
-
-#if defined(__ENABLE_DEBUG__) && defined(__ENABLE_SYSLOG_DEBUG__)
-    if((g_bEnableOutputBufferDebug == true) && (g_debug == false))
-    {
-        // Disable Output Buffer Debug
-        DEBUG_PRINTF("Disable Output Buffer Debug.\r\n");
-        g_bEnableOutputBufferDebug = false;
-        bDisableOutputBufferDebug = true;
-    }
-#endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
-
-	if((recovery == false) && (skip_information_update == false)) // Normal Mode & Don't Skip Information (Section) Update
-	{
-		// Write Information Page
-		DEBUG_PRINTF("Update Information Page...\r\n");
-		err = write_page_data(info_page_buf, sizeof(info_page_buf));
-		if(err != TP_SUCCESS)
-		{
-			ERROR_PRINTF("%s: Fail to Write Infomation Page! errno=0x%x.\r\n", __func__, err);
-			goto UPDATE_FIRMWARE_EXIT;
-		}
-	}
-
-    // Reset file pointer
-    lseek(g_firmware_fd, 0, SEEK_SET); 
-
-	// Write Main Pages
-	page_count = compute_firmware_page_number(g_firmware_size);
-	block_count = (page_count / 30) + ((page_count % 30) != 0);
-	DEBUG_PRINTF("Update %d Main Pages with %d Page Blocks...\r\n", page_count, block_count);
-	for(block_index = 0; block_index < block_count; block_index++)
-	{
-		// Print test progress to inform operators
-        printf(".");
-        fflush(stdout);
-
-		// Clear Page Block Buffer
-		memset(page_block_buf, 0, sizeof(page_block_buf));
-
-		// Get Bulk FW Page Data
-		if((block_index == (block_count - 1)) && ((page_count % 30) != 0)) // Last Block
-			block_page_num = page_count % 30; // Last Block Page Number
-		else
-			block_page_num = 30; // 30 Page
-
-		// Load Page Data into Buffer
-		err = retrieve_data_from_firmware(page_block_buf, ELAN_FIRMWARE_PAGE_SIZE * block_page_num);
-		if(err != TP_SUCCESS)
-		{
-			ERROR_PRINTF("%s: Fail to Retrieve Page Block Data from Firmware! errno=0x%x.\r\n", __func__, err);
-			goto UPDATE_FIRMWARE_EXIT;
-		}
-
-		// Write Bulk FW Page Data
-		err = write_page_data(page_block_buf, ELAN_FIRMWARE_PAGE_SIZE * block_page_num);
-		if(err != TP_SUCCESS)
-		{
-			ERROR_PRINTF("%s: Fail to Write FW Page Block %d (%d-Page)! errno=0x%x.\r\n", __func__, block_index, block_page_num, err);
-			goto UPDATE_FIRMWARE_EXIT;
-		}
-	}
-
-	// 
-	// Self-Reset
-	//
-	sleep(1); // wait for 1s
-	printf("\r\n"); //Print CRLF in console
-
-	// Success
-	printf("FW Update Finished.\r\n");
-	err = TP_SUCCESS;
-
-UPDATE_FIRMWARE_EXIT:
-
-#if defined(__ENABLE_DEBUG__) && defined(__ENABLE_SYSLOG_DEBUG__)
-    if(bDisableOutputBufferDebug == true)
-    {
-        // Re-Enable Output Buffer Debug
-        DEBUG_PRINTF("Re-Enable Output Buffer Debug.\r\n");
-        g_bEnableOutputBufferDebug = true;
-    }
-#endif //__ENABLE_SYSLOG_DEBUG__ && __ENABLE_SYSLOG_DEBUG__
-
-	return err;
-}
 
 /*******************************************
  * Log
@@ -731,30 +254,30 @@ UPDATE_FIRMWARE_EXIT:
 #ifdef __SUPPORT_RESULT_LOG__
 int generate_result_log(char *filename, size_t filename_len, bool result)
 {
-	int err = TP_SUCCESS;
+    int err = TP_SUCCESS;
     FILE *fd = NULL;
 
-	if(g_quiet == false) // Disable Silent Mode
-		printf("--------------------------------\r\n");
+    if(g_silent_mode == false) // Disable Silent Mode
+        printf("--------------------------------\r\n");
 
-	// Make Sure Filename Valid
-	if(filename == NULL)
-	{
-		ERROR_PRINTF("%s: Null String of Filename!\r\n", __func__);
-		err = TP_ERR_INVALID_PARAM;
-		goto GENERATE_RESULT_LOG_EXIT;
-	}
+    // Make Sure Filename Valid
+    if(filename == NULL)
+    {
+        ERROR_PRINTF("%s: Null String of Filename!\r\n", __func__);
+        err = TP_ERR_INVALID_PARAM;
+        goto GENERATE_RESULT_LOG_EXIT;
+    }
 
-	// Make Sure Filename Length Valid
-	if(filename_len == 0)
-	{
-		ERROR_PRINTF("%s: Filename String Length is Zero!\r\n", __func__);
-		err = TP_ERR_INVALID_PARAM;
-		goto GENERATE_RESULT_LOG_EXIT;
-	}
-	
-	// Debug
-	DEBUG_PRINTF("%s: filename=\"%s\", filename_len=%zd, result=%s.\r\n", __func__, filename, filename_len, (result) ? "true" : "false");
+    // Make Sure Filename Length Valid
+    if(filename_len == 0)
+    {
+        ERROR_PRINTF("%s: Filename String Length is Zero!\r\n", __func__);
+        err = TP_ERR_INVALID_PARAM;
+        goto GENERATE_RESULT_LOG_EXIT;
+    }
+
+    // Debug
+    DEBUG_PRINTF("%s: filename=\"%s\", filename_len=%zd, result=%s.\r\n", __func__, filename, filename_len, (result) ? "true" : "false");
 
     // Remove Old Log File
     remove(filename);
@@ -762,11 +285,11 @@ int generate_result_log(char *filename, size_t filename_len, bool result)
     // Create a new file
     fd = fopen(filename, "w");
     if (fd == NULL)
-	{
-		ERROR_PRINTF("%s: Fail to open log file \"%s\"!\r\n", __func__, filename);
-		err = TP_ERR_FILE_NOT_FOUND;
-		goto GENERATE_RESULT_LOG_EXIT;
-	}
+    {
+        ERROR_PRINTF("%s: Fail to open log file \"%s\"!\r\n", __func__, filename);
+        err = TP_ERR_FILE_NOT_FOUND;
+        goto GENERATE_RESULT_LOG_EXIT;
+    }
 
     // Write result to file
     if (result == true) // Pass
@@ -777,7 +300,7 @@ int generate_result_log(char *filename, size_t filename_len, bool result)
     fclose(fd);
 
 GENERATE_RESULT_LOG_EXIT:
-	return err;
+    return err;
 }
 #endif //__SUPPORT_RESULT_LOG__
 
@@ -787,61 +310,61 @@ GENERATE_RESULT_LOG_EXIT:
 
 void show_help_information(void)
 {
-	printf("--------------------------------\r\n");
-	printf("SYNOPSIS:\r\n");
+    printf("--------------------------------\r\n");
+    printf("SYNOPSIS:\r\n");
 
-	// PID
-	printf("\n[PID]\r\n");
-	printf("-p <pid in decimal>.\r\n");
-	printf("Ex: elan_iap -p 1842\r\n");
-	printf("-P <PID in hex>.\r\n");
-	printf("Ex: elan_iap -P 732 (0x732)\r\n");
+    // PID
+    printf("\n[PID]\r\n");
+    printf("-p <pid in decimal>.\r\n");
+    printf("Ex: elan_iap -p 1842\r\n");
+    printf("-P <PID in hex>.\r\n");
+    printf("Ex: elan_iap -P 732 (0x732)\r\n");
 
-	// File Path
-	printf("\n[File Path]\r\n");
-	printf("-f <file_path>.\r\n");
-	printf("Ex: elan_iap -f firmware.ekt\r\n");
-	printf("Ex: elan_iap -f /tmp/firmware.ekt\r\n");
+    // File Path
+    printf("\n[File Path]\r\n");
+    printf("-f <file_path>.\r\n");
+    printf("Ex: elan_iap -f firmware.ekt\r\n");
+    printf("Ex: elan_iap -f /tmp/firmware.ekt\r\n");
 
-	// Skip Action
-	printf("\n[Skip Action]\r\n");
-	printf("-s <action_code>.\r\n");
-	printf("Ex: elan_iap -s 1 \r\n");
+    // Skip Action
+    printf("\n[Skip Action]\r\n");
+    printf("-s <action_code>.\r\n");
+    printf("Ex: elan_iap -s 1 \r\n");
 
-	// Firmware Information
-	printf("\n[Firmware Information]\r\n");
-	printf("-i.\r\n");
-	printf("Ex: elan_iap -i\r\n");
+    // Firmware Information
+    printf("\n[Firmware Information]\r\n");
+    printf("-i.\r\n");
+    printf("Ex: elan_iap -i\r\n");
 
-	// Re-Calibarion
-	printf("\n[Re-Calibarion]\r\n");
-	printf("-k.\r\n");
-	printf("Ex: elan_iap -k\r\n");
+    // Re-Calibarion
+    printf("\n[Re-Calibarion]\r\n");
+    printf("-k.\r\n");
+    printf("Ex: elan_iap -k\r\n");
 
 #ifdef __SUPPORT_RESULT_LOG__
-	// Result Log
-	printf("\n[Result Log File Path]\r\n");
-	printf("-l <result_log_file_path>.\r\n");
-	printf("Ex: elan_iap -l result.txt\r\n");
-	printf("Ex: elan_iap -l /tmp/result.txt\r\n");
+    // Result Log
+    printf("\n[Result Log File Path]\r\n");
+    printf("-l <result_log_file_path>.\r\n");
+    printf("Ex: elan_iap -l result.txt\r\n");
+    printf("Ex: elan_iap -l /tmp/result.txt\r\n");
 #endif //__SUPPORT_RESULT_LOG__
 
-	// Silent (Quiet) Mode
-	printf("\n[Silent Mode]\r\n");
-	printf("-q.\r\n");
-	printf("Ex: elan_iap -q\r\n");
+    // Silent (Quiet) Mode
+    printf("\n[Silent Mode]\r\n");
+    printf("-q.\r\n");
+    printf("Ex: elan_iap -q\r\n");
 
-	// Debug Information
-	printf("\n[Debug]\r\n");
-	printf("-d.\r\n");
-	printf("Ex: elan_iap -d\r\n");
+    // Debug Information
+    printf("\n[Debug]\r\n");
+    printf("-d.\r\n");
+    printf("Ex: elan_iap -d\r\n");
 
-	// Help Information
-	printf("\n[Help]\r\n");
-	printf("-h.\r\n");
-	printf("Ex: elan_iap -h\r\n");
+    // Help Information
+    printf("\n[Help]\r\n");
+    printf("-h.\r\n");
+    printf("Ex: elan_iap -h\r\n");
 
-	return;
+    return;
 }
 
 /*******************************************
@@ -859,7 +382,7 @@ int open_device(void)
     DEBUG_PRINTF("Get I2C-HID Device Handle (VID=0x%x, PID=0x%x).\r\n", ELAN_USB_VID, g_pid);
     err = g_pIntfGet->GetDeviceHandle(ELAN_USB_VID, g_pid);
     if (err != TP_SUCCESS)
-        ERROR_PRINTF("Device can't connected! errno=0x%x.\n", err);
+        ERROR_PRINTF("Device can't connected! err=0x%x.\n", err);
     /*********************************/
 
     return err;
@@ -885,7 +408,8 @@ int close_device(void)
 
 int resource_init(void)
 {
-    int err = TP_SUCCESS;
+    int err = TP_SUCCESS,
+        firmware_size = 0;
 
     //initialize_resource(); //pseudo function
 
@@ -897,38 +421,37 @@ int resource_init(void)
     {
         ERROR_PRINTF("Fail to initialize I2C-HID Interface!");
         err = TP_ERR_NO_INTERFACE_CREATE;
-		goto RESOURCE_INIT_EXIT;
+        goto RESOURCE_INIT_EXIT;
     }
 
-	if(g_update_fw == true)
-	{
-		// Open Firmware File
-		err = open_firmware_file(g_firmware_filename, strlen(g_firmware_filename), &g_firmware_fd);
-		if(err != TP_SUCCESS)
-		{
-			ERROR_PRINTF("Fail to open firmware file \"%s\"! errno=0x%x.\r\n", g_firmware_filename, errno);
-			goto RESOURCE_INIT_EXIT;
-		}
-	
-		// Get Firmware Size
-		err = get_firmware_size(g_firmware_fd, &g_firmware_size);
-		if(err != TP_SUCCESS)
-		{
-			ERROR_PRINTF("Fail to open firmware file \"%s\"! errno=0x%x.\r\n", g_firmware_filename, errno);
-			goto RESOURCE_INIT_EXIT;
-		}
+    if(g_update_fw == true)
+    {
+        // Open Firmware File
+        err = open_firmware_file(g_firmware_filename, strlen(g_firmware_filename));
+        if(err != TP_SUCCESS)
+        {
+            ERROR_PRINTF("Fail to open firmware file \"%s\"! err=0x%x.\r\n", g_firmware_filename, err);
+            goto RESOURCE_INIT_EXIT;
+        }
 
-		// Make Sure Firmware File Valid
-		//DEBUG_PRINTF("Firmware fd=%d, size=%d.\r\n", g_firmware_fd, g_firmware_size);
-		if((g_firmware_fd < 0) || (g_firmware_size <= 0))
-		{
-			ERROR_PRINTF("Fail to open firmware file \'%s\', size=%d, errno=0x%x.\r\n", \
-              g_firmware_filename, g_firmware_size, g_firmware_fd);
-			err = TP_ERR_FILE_NOT_FOUND;
-			goto RESOURCE_INIT_EXIT;
-		}
-		lseek(g_firmware_fd, 0, SEEK_SET); // Reset file pointer
-	}
+        // Get Firmware Size
+        err = get_firmware_size(&firmware_size);
+        if(err != TP_SUCCESS)
+        {
+            ERROR_PRINTF("Fail to open firmware size \"%s\"! err=0x%x.\r\n", g_firmware_filename, err);
+            goto RESOURCE_INIT_EXIT;
+        }
+
+        // Make Sure Firmware File Valid
+        //DEBUG_PRINTF("Firmware Size: %d.\r\n", firmware_size);
+        if(firmware_size <= 0)
+        {
+            ERROR_PRINTF("Invalid Firmware Size: %d!\r\n", firmware_size);
+            err = TP_ERR_FILE_NOT_FOUND;
+            goto RESOURCE_INIT_EXIT;
+        }
+
+    }
     /*********************************/
 
 RESOURCE_INIT_EXIT:
@@ -942,12 +465,11 @@ int resource_free(void)
     //release_resource(); //pseudo function
 
     /*** example *********************/
-	if(g_update_fw == true)
-	{
-		// Close Firmware File
-		close_firmware_file(g_firmware_fd);
-		g_firmware_fd = -1;
-	}
+    if(g_update_fw == true)
+    {
+        // Close Firmware File
+        close_firmware_file();
+    }
 
     // Release Interface
     if (g_pIntfGet)
@@ -967,13 +489,13 @@ int resource_free(void)
 int process_parameter(int argc, char **argv)
 {
     int err = TP_SUCCESS,
-		opt = 0,
+        opt = 0,
         option_index = 0,
-		pid = 0,
-		pid_str_len = 0,
-		file_path_len = 0,
-		action_code = 0;
-	char file_path[FILE_NAME_LENGTH_MAX] = {0};
+        pid = 0,
+        pid_str_len = 0,
+        file_path_len = 0,
+        action_code = 0;
+    char file_path[FILE_NAME_LENGTH_MAX] = {0};
 
     while (1)
     {
@@ -995,10 +517,10 @@ int process_parameter(int argc, char **argv)
 
                 // Set Global ADC Type
                 g_pid = pid;
-				DEBUG_PRINTF("%s: PID=%d(0x%x).\r\n", __func__, g_pid, g_pid);
+                DEBUG_PRINTF("%s: PID=%d(0x%x).\r\n", __func__, g_pid, g_pid);
                 break;
 
-			case 'P': /* PID (Hex) */
+            case 'P': /* PID (Hex) */
 
                 // Make Sure Format Valid
                 pid_str_len = strlen(optarg);
@@ -1009,7 +531,7 @@ int process_parameter(int argc, char **argv)
                     goto PROCESS_PARAM_EXIT;
                 }
 
-				// Make Sure Data Valid
+                // Make Sure Data Valid
                 pid = strtol(optarg, NULL, 16);
                 if (pid < 0)
                 {
@@ -1020,7 +542,7 @@ int process_parameter(int argc, char **argv)
 
                 // Set Global ADC Type
                 g_pid = pid;
-				DEBUG_PRINTF("%s: PID=0x%x.\r\n", __func__, g_pid);
+                DEBUG_PRINTF("%s: PID=0x%x.\r\n", __func__, g_pid);
                 break;
 
             case 'f': /* FW File Path */
@@ -1034,25 +556,25 @@ int process_parameter(int argc, char **argv)
                     goto PROCESS_PARAM_EXIT;
                 }
 
-				// Check if file path is valid
-				strcpy(file_path, optarg);
+                // Check if file path is valid
+                strcpy(file_path, optarg);
                 //DEBUG_PRINTF("%s: fw file path=\"%s\".\r\n", __func__, file_path);
-				if(strncmp(file_path, "", strlen(file_path)) == 0)
-				{
+                if(strncmp(file_path, "", strlen(file_path)) == 0)
+                {
                     ERROR_PRINTF("%s: NULL Firmware Path!\r\n", __func__);
                     err = TP_ERR_INVALID_PARAM;
                     goto PROCESS_PARAM_EXIT;
                 }
 
-				// Set FW Update Flag
-				g_update_fw = true;
+                // Set FW Update Flag
+                g_update_fw = true;
 
-				// Set Global File Path
+                // Set Global File Path
                 strncpy(g_firmware_filename, file_path, strlen(file_path));
-				DEBUG_PRINTF("%s: Update FW: %s, File Path: \"%s\".\r\n", __func__, (g_update_fw) ? "Yes" : "No", g_firmware_filename);
+                DEBUG_PRINTF("%s: Update FW: %s, File Path: \"%s\".\r\n", __func__, (g_update_fw) ? "Yes" : "No", g_firmware_filename);
                 break;
 
-			case 's': /* Skip Action */
+            case 's': /* Skip Action */
 
                 // Make Sure Data Valid
                 action_code = atoi(optarg);
@@ -1065,17 +587,17 @@ int process_parameter(int argc, char **argv)
 
                 // Set Global ADC Type
                 g_skip_action_code = action_code;
-				DEBUG_PRINTF("%s: Skip Action Code: %d.\r\n", __func__, g_skip_action_code);
+                DEBUG_PRINTF("%s: Skip Action Code: %d.\r\n", __func__, g_skip_action_code);
                 break;
 
-			case 'i': /* Firmware Information */
+            case 'i': /* Firmware Information */
 
                 // Set "Get FW Info." Flag
                 g_get_fw_info = true;
                 DEBUG_PRINTF("%s: Get FW Inforamtion: %s.\r\n", __func__, (g_get_fw_info) ? "Enable" : "Disable");
                 break;
 
-			case 'k': /* Re-Calibration (Re-K) */
+            case 'k': /* Re-Calibration (Re-K) */
 
                 // Set Re-K Flag
                 g_rek = true;
@@ -1085,7 +607,7 @@ int process_parameter(int argc, char **argv)
 #ifdef __SUPPORT_RESULT_LOG__
             case 'l': /* Log Filename */
 
-                 // Check if filename is valid
+                // Check if filename is valid
                 file_path_len = strlen(optarg);
                 if ((file_path_len == 0) || (file_path_len > FILE_NAME_LENGTH_MAX))
                 {
@@ -1094,10 +616,10 @@ int process_parameter(int argc, char **argv)
                     goto PROCESS_PARAM_EXIT;
                 }
 
-				// Check if file path is valid
-				strcpy(file_path, optarg);
-				if(strncmp(file_path, "", strlen(file_path)) == 0)
-				{
+                // Check if file path is valid
+                strcpy(file_path, optarg);
+                if(strncmp(file_path, "", strlen(file_path)) == 0)
+                {
                     ERROR_PRINTF("%s: NULL Log Path!\r\n", __func__);
                     err = TP_ERR_INVALID_PARAM;
                     goto PROCESS_PARAM_EXIT;
@@ -1112,11 +634,11 @@ int process_parameter(int argc, char **argv)
                 break;
 #endif //__SUPPORT_RESULT_LOG__
 
-			case 'q': /* Silent Mode (Quiet) */
+            case 'q': /* Silent Mode (Quiet) */
 
-                // Enable Silent Mode (Quiet)
-                g_quiet = true;
-                DEBUG_PRINTF("%s: Silent Mode: %s.\r\n", __func__, (g_quiet) ? "Enable" : "Disable");
+                // Enable Silent Mode
+                g_silent_mode = true;
+                DEBUG_PRINTF("%s: Silent Mode: %s.\r\n", __func__, (g_silent_mode == true) ? "Enable" : "Disable");
                 break;
 
             case 'd': /* Debug Option */
@@ -1126,7 +648,7 @@ int process_parameter(int argc, char **argv)
                 DEBUG_PRINTF("Debug: %s.\r\n", (g_debug) ? "Enable" : "Disable");
                 break;
 
-			case 'h': /* Help */
+            case 'h': /* Help */
 
                 // Set debug
                 g_help = true;
@@ -1139,14 +661,14 @@ int process_parameter(int argc, char **argv)
         }
     }
 
-	// Check if PID is not null
-	if(g_pid == 0)
-	{
-		DEBUG_PRINTF("%s: PID is not set, look for an appropriate PID...\r\n", __func__);
-	}
+    // Check if PID is not null
+    if(g_pid == 0)
+    {
+        DEBUG_PRINTF("%s: PID is not set, look for an appropriate PID...\r\n", __func__);
+    }
 
 #ifdef __SUPPORT_RESULT_LOG__
-	// Check if log filename is not null
+    // Check if log filename is not null
     if (strcmp(g_log_file, "") == 0)
     {
         DEBUG_PRINTF("%s: Log filename is not set, set as \"%s\".\r\n", __func__, DEFAULT_LOG_FILENAME);
@@ -1163,7 +685,7 @@ int process_parameter(int argc, char **argv)
     return TP_SUCCESS;
 
 PROCESS_PARAM_EXIT:
-    DEBUG_PRINTF("[ELAN] ParserCmd: Exit because of an error occurred, errno=0x%x.\r\n", err);
+    DEBUG_PRINTF("[ELAN] ParserCmd: Exit because of an error occurred, err=0x%x.\r\n", err);
     return err;
 }
 
@@ -1174,131 +696,220 @@ PROCESS_PARAM_EXIT:
 int main(int argc, char **argv)
 {
     int err = TP_SUCCESS;
-	unsigned char hello_packet = 0;
-	bool recovery = false; // Recovery Mode
+    unsigned short fw_bc_version = 0,
+                   bc_bc_version = 0;
+    unsigned char hello_packet = 0;
+    bool gen8_touch = false,	// True if Gen8 Touch
+         recovery = false;		// True if Recovery Mode
 
-	// Process Parameter
-	err = process_parameter(argc, argv);
+    // Process Parameter
+    err = process_parameter(argc, argv);
     if (err != TP_SUCCESS)
-	{
+    {
         goto EXIT;
-	}
+    }
 
-	if (g_quiet == false) // Disable Silent Mode
-	{
-		printf("i2chid_iap v%s %s.\r\n", ELAN_TOOL_SW_VERSION , ELAN_TOOL_SW_RELEASE_DATE);
-	}
+    if (g_silent_mode == false) // Disable Silent Mode
+    {
+        printf("i2chid_iap v%s %s.\r\n", ELAN_TOOL_SW_VERSION, ELAN_TOOL_SW_RELEASE_DATE);
+    }
 
-	/* Show Help Information */
-	if(g_help == true)
-	{
-		show_help_information();
-		goto EXIT;
-	}
+    /* Show Help Information */
+    if(g_help == true)
+    {
+        show_help_information();
+        goto EXIT;
+    }
 
     /* Initialize Resource */
-	err = resource_init();
+    err = resource_init();
     if (err != TP_SUCCESS)
-	{
-		ERROR_PRINTF("Fail to Init Resource! errno=0x%x.\r\n", err);
+    {
+        ERROR_PRINTF("Fail to Init Resource! err=0x%x.\r\n", err);
         goto EXIT1;
-	}
+    }
 
     /* Open Device */
-	err = open_device() ;
+    err = open_device() ;
     if (err != TP_SUCCESS)
-	{
-		ERROR_PRINTF("Fail to Open Device! errno=0x%x.\r\n", err);
+    {
+        ERROR_PRINTF("Fail to Open Device! err=0x%x.\r\n", err);
         goto EXIT2;
-	}
+    }
 
-	/* Check for Recovery */
-	err = get_hello_packet_with_error_retry(&hello_packet, ERROR_RETRY_COUNT);
-	if(err != TP_SUCCESS)
-	{
-		ERROR_PRINTF("Fail to Get Hello Packet! errno=0x%x.\r\n", err);
-		goto EXIT2;
-	}
+    /* Detect Touch State */
 
-	// Reconfigure if Recovery Mode
-	if(hello_packet == ELAN_I2CHID_RECOVERY_MODE_HELLO_PACKET)
-	{
-		printf("In Recovery Mode.\r\n");
-		recovery = true; 		// Enable Recovery
-		g_get_fw_info = false;	// Disable Get FW Info.
-		g_rek = false;			// Disable Re-Calibration
-	}
+    // Get Hello Packet
+    err = get_hello_packet_bc_version_with_error_retry(&hello_packet, &bc_bc_version, ERROR_RETRY_COUNT);
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("Fail to Get Hello Packet (& BC Version)! err=0x%x.\r\n", err);
+        goto EXIT2;
+    }
+    DEBUG_PRINTF("Hello Packet: 0x%02x, Recovery Mode BC Version: 0x%04x.\r\n", hello_packet, bc_bc_version);
 
-	/* Get FW Information */
-	if((g_get_fw_info == true) && (g_update_fw == false))
-	{
-    	DEBUG_PRINTF("Get FW Info.\r\n");
-		err = get_firmware_information(g_quiet /* Slient Mode */);
-		if(err != TP_SUCCESS)
-		{
-        	ERROR_PRINTF("Fail to Get FW Info!\r\n");
-        	goto EXIT2;
-    	}
-	}
+    // Identify HW Series & Touch State
+    switch (hello_packet)
+    {
+        case ELAN_I2CHID_NORMAL_MODE_HELLO_PACKET:
+            // BC Version (Normal Mode)
+            err = get_boot_code_version(&fw_bc_version);
+            if(err != TP_SUCCESS)
+            {
+                ERROR_PRINTF("%s: Fail to Get BC Version (Normal Mode)! err=0x%x.\r\n", __func__, err);
+                goto EXIT2;
+            }
+            DEBUG_PRINTF("Normal Mode BC Version: 0x%04x.\r\n", fw_bc_version);
 
-	/* Re-calibrate Touch */
-	if(g_rek == true)
-	{
-		DEBUG_PRINTF("Calibrate Touch...\r\n");
-		//err = calibrate_touch() ;
-        err = calibrate_touch_with_error_retry(ERROR_RETRY_COUNT);
-		if (err != TP_SUCCESS)
-		{
-			ERROR_PRINTF("Fail to Calibrate Touch!\r\n");
-			goto EXIT2;
-    	}
-	}
+            // Special Case: First BC of EM32F901 / EM32F902
+            if((HIGH_BYTE(fw_bc_version) == BC_VER_H_BYTE_FOR_EM32F901_I2CHID) /* EM32F901 */ ||
+               (HIGH_BYTE(fw_bc_version) == BC_VER_H_BYTE_FOR_EM32F902_I2CHID) /* FM32F902 */)
+                gen8_touch = true;	// Gen8 Touch
+            else
+                gen8_touch = false;	// Gen5/6/7 Touch
+            recovery = false;		// Normal Mode
+            break;
 
-	/* Update FW */
-	if(g_update_fw == true)
-	{
-		if(recovery == false) // Normal IAP
-		{
-			// Get FW Info.
-			DEBUG_PRINTF("Get FW Info.\r\n");
-			err = get_firmware_information(false /* Disable Silent Mode */);
-			if(err != TP_SUCCESS)
-			{
-        		ERROR_PRINTF("Fail to Get FW Info!\r\n");
-        		goto EXIT2;
-    		}
-		}
+        case ELAN_GEN8_I2CHID_NORMAL_MODE_HELLO_PACKET:
+            gen8_touch = true;		// Gen8 Touch
+            recovery = false;		// Normal Mode
+            break;
 
-		// Update Firmware
-		DEBUG_PRINTF("Update Firmware (%s).\r\n", g_firmware_filename);
-		err = update_firmware(g_firmware_filename, strlen(g_firmware_filename), recovery);
-		if (err != TP_SUCCESS)
-		{
-			ERROR_PRINTF("Fail to Update Firmware (%s)!\r\n", g_firmware_filename);
-			goto EXIT2;
-    	}
+        case ELAN_I2CHID_RECOVERY_MODE_HELLO_PACKET:
+            // Special Case: First BC of EM32F901 / EM32F902
+            if((HIGH_BYTE(bc_bc_version) == BC_VER_H_BYTE_FOR_EM32F901_I2CHID) /* EM32F901 */ ||
+               (HIGH_BYTE(bc_bc_version) == BC_VER_H_BYTE_FOR_EM32F902_I2CHID) /* FM32F902 */)
+                gen8_touch = true;	// Gen8 Touch
+            else
+                gen8_touch = false;	// Gen5/6/7 Touch
+            recovery = true;		// Recovery Mode
+            break;
 
-		// Re-calibrate Touch
-		DEBUG_PRINTF("Calibrate Touch...\r\n");
-		//err = calibrate_touch() ;
-        err = calibrate_touch_with_error_retry(ERROR_RETRY_COUNT);
-		if (err != TP_SUCCESS)
-		{
-			ERROR_PRINTF("Fail to Calibrate Touch!\r\n");
-			goto EXIT2;
-    	}
+        case ELAN_GEN8_I2CHID_RECOVERY_MODE_HELLO_PACKET:
+            gen8_touch = true;		// Gen8 Touch
+            recovery = true;		// Recovery Mode
+            break;
 
-		// Get FW Info.
-		DEBUG_PRINTF("Get FW Info.\r\n");
-		err = get_firmware_information(false /* Disable Silent Mode */);
-		if(err != TP_SUCCESS)
-		{
-        	ERROR_PRINTF("Fail to Get FW Info!\r\n");
-        	goto EXIT2;
-    	}
-	}
+        default:
+            ERROR_PRINTF("%s: Unknown Hello Packet! (0x%02x) \r\n", __func__, hello_packet);
+            err = TP_UNKNOWN_DEVICE_TYPE;
+            goto EXIT2;
+    }
 
-	// Success
+    // Reconfigure if Recovery Mode
+    if(recovery == true)
+    {
+        printf("In Recovery Mode.\r\n");
+        g_get_fw_info = false;	// Disable Get FW Info.
+        g_rek = false;			// Disable Re-Calibration
+    }
+
+    /* Get FW Information */
+    if((g_get_fw_info == true) && (g_update_fw == false))
+    {
+        DEBUG_PRINTF("Get FW Info.\r\n");
+        if(gen8_touch) // Gen8 Touch
+            err = gen8_get_firmware_information(g_silent_mode);
+        else // Gen5/6/7 Touch
+            err = get_firmware_information(g_silent_mode);
+        if(err != TP_SUCCESS)
+        {
+            ERROR_PRINTF("Fail to Get FW Info!\r\n");
+            goto EXIT2;
+        }
+    }
+
+    /* Re-calibrate Touch */
+    if(g_rek == true)
+    {
+        if(gen8_touch == false) // Gen5/6/7 Touch
+        {
+            DEBUG_PRINTF("Calibrate Touch...\r\n");
+            err = calibrate_touch_with_error_retry(ERROR_RETRY_COUNT);
+            if (err != TP_SUCCESS)
+            {
+                ERROR_PRINTF("Fail to Calibrate Touch!\r\n");
+                goto EXIT2;
+            }
+        }
+        else // Gen8 Touch
+        {
+            /* [Note] 2022/06/29
+            * Re-Calibration is not supported from Gen8 touch.
+            * To avoid timeout waiting, this function is disable in Gen8 case.
+            */
+            ERROR_PRINTF("Re-Calibration is not supported from Gen8 touch!\r\n");
+        }
+    }
+
+    /* Update FW */
+    if(g_update_fw == true)
+    {
+        if(recovery == false) // Normal IAP
+        {
+            // Get FW Info.
+            DEBUG_PRINTF("Get FW Info.\r\n");
+            if(gen8_touch) // Gen8 Touch
+                err = gen8_get_firmware_information(false /* Disable Silent Mode */);
+            else // Gen5/6/7 Touch
+                err = get_firmware_information(false /* Disable Silent Mode */);
+            if(err != TP_SUCCESS)
+            {
+                ERROR_PRINTF("Fail to Get FW Info!\r\n");
+                goto EXIT2;
+            }
+        }
+
+        // Update Firmware
+        DEBUG_PRINTF("Update Firmware (%s), Gen8 Touch: %s, Recovery: %s, Skip Action Code: 0x%x.\r\n", \
+                     g_firmware_filename, \
+                     (gen8_touch) ? "true" : "false", \
+                     (recovery) ? "true" : "false", \
+                     g_skip_action_code);
+        if(gen8_touch) // Gen8 Touch
+            err = gen8_update_firmware(g_firmware_filename, strlen(g_firmware_filename), recovery, g_skip_action_code);
+        else // Gen5/6/7 Touch
+            err = update_firmware(g_firmware_filename, strlen(g_firmware_filename), recovery, g_skip_action_code);
+        if (err != TP_SUCCESS)
+        {
+            ERROR_PRINTF("Fail to Update Firmware (%s)!\r\n", g_firmware_filename);
+            goto EXIT2;
+        }
+
+        // Re-calibrate Touch
+        DEBUG_PRINTF("Calibrate Touch...\r\n");
+        if(gen8_touch)
+        {
+            /* [Note] 2022/06/06
+            * With the information from FW Solution Team, it takes 100ms for touch to self-calibrate after power-on.
+            * For safety reasons, a waiting time of 300ms is recommended.
+            */
+            usleep(300 * 1000); // wait 300ms
+        }
+        else // Gen5/6/7 Touch
+        {
+            err = calibrate_touch_with_error_retry(ERROR_RETRY_COUNT);
+            if (err != TP_SUCCESS)
+            {
+                ERROR_PRINTF("Fail to Calibrate Touch!\r\n");
+                goto EXIT2;
+            }
+        }
+
+        // Get FW Info.
+        DEBUG_PRINTF("Get FW Info.\r\n");
+        if(gen8_touch) // Gen8 Touch
+            err = gen8_get_firmware_information(false /* Disable Silent Mode */);
+        else // Gen5/6/7 Touch
+            err = get_firmware_information(false /* Disable Silent Mode */);
+        if(err != TP_SUCCESS)
+        {
+            ERROR_PRINTF("Fail to Get FW Info!\r\n");
+            goto EXIT2;
+        }
+    }
+
+    // Success
     err = TP_SUCCESS;
 
 EXIT2:
@@ -1310,18 +921,18 @@ EXIT1:
 
 EXIT:
 #ifdef __SUPPORT_RESULT_LOG__
-	// Log Result
-	if(err == TP_SUCCESS)
-		generate_result_log(g_log_file, sizeof(g_log_file), true /* PASS */);
-	else
-		generate_result_log(g_log_file, sizeof(g_log_file), false /* FAIL */);
+    // Log Result
+    if(err == TP_SUCCESS)
+        generate_result_log(g_log_file, sizeof(g_log_file), true /* PASS */);
+    else
+        generate_result_log(g_log_file, sizeof(g_log_file), false /* FAIL */);
 #endif //__SUPPORT_RESULT_LOG__
 
-	if(g_quiet == false) // Disable Silent Mode
-	{
-		// End of Output Stream
-    	printf("\r\n");
-	}
+    if(g_silent_mode == false) // Disable Silent Mode
+    {
+        // End of Output Stream
+        printf("\r\n");
+    }
 
     return err;
 }

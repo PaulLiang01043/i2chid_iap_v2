@@ -30,6 +30,7 @@
 // Global Variable
 //////////////////////////////////////////////////////////////////////
 
+// Debug
 bool g_bEnableDebug = true;
 bool g_bEnableOutputBufferDebug = true;
 bool g_bEnableErrorMsg = true;
@@ -327,10 +328,10 @@ int CBaseLog::CleanFileContentWithPath(const char *pszFilePath)
 
     fd = fopen(pszFilePath, "w");
     if (fd == NULL)
-	{
-		printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, pszFilePath, errno);
+    {
+        printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, pszFilePath, errno);
         nRet = TP_ERR_IO_ERROR;
-	}
+    }
     else //if(fd != NULL)
         fclose(fd);
 
@@ -885,10 +886,10 @@ void CBaseLog::DebugLog(char *pszLog)
 #ifdef __ENABLE_LOG_FILE_DEBUG__
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
-	{
-		printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, m_szDebugLogFilePath, errno);
+    {
+        printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, m_szDebugLogFilePath, errno);
         goto DEBUG_LOG_EXIT_1;
-	}
+    }
 
     // Clear Buffer
     memset(m_szDateBuffer, 0, sizeof(m_szDateBuffer));
@@ -956,10 +957,10 @@ void CBaseLog::DebugLogFormat(const char *pszFormat, ...)
     // Make Sure Log File Exist
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
-	{
-		printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, m_szDebugLogFilePath, errno);
+    {
+        printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, m_szDebugLogFilePath, errno);
         goto DEBUG_LOG_FORMAT_EXIT_1;
-	}
+    }
 
     // Clear Buffer
     memset(m_szDateBuffer, 0, sizeof(m_szDateBuffer));
@@ -1024,10 +1025,10 @@ void CBaseLog::ErrorLog(char *pszLog)
 #ifdef __ENABLE_LOG_FILE_DEBUG__
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
-	{
-		printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, m_szDebugLogFilePath, errno);
+    {
+        printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, m_szDebugLogFilePath, errno);
         goto ERROR_LOG_EXIT_1;
-	}
+    }
 
     // Clear Buffer
     memset(m_szDateBuffer, 0, sizeof(m_szDateBuffer));
@@ -1094,10 +1095,10 @@ void CBaseLog::ErrorLogFormat(const char *pszFormat, ...)
 #ifdef __ENABLE_LOG_FILE_DEBUG__
     fd = fopen(m_szDebugLogFilePath, "a+");
     if (fd == NULL)
-	{
-		printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, m_szDebugLogFilePath, errno);
+    {
+        printf("%s: Fail to open \"%s\"! (errno=%d)\r\n", __func__, m_szDebugLogFilePath, errno);
         goto ERROR_LOG_FORMAT_EXIT_1;
-	}
+    }
 
     // Clear Buffer
     memset(m_szDateBuffer, 0, sizeof(m_szDateBuffer));

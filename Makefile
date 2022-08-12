@@ -5,9 +5,14 @@
 program := i2chid_iap_v2
 objects := BaseLog.o \
 		   I2CHIDLinuxGet.o \
-           ElanTsI2chidUtility.o \
+		   ElanTsI2chidUtility.o \
 		   ElanTsFuncApi.o \
-           ElanTsIapFileIoUtility.o \
+		   ElanTsFwFileIoUtility.o \
+		   ElanTsFwUpdateFlow.o \
+		   ElanGen8TsI2chidUtility.o \
+		   ElanGen8TsFuncApi.o \
+		   ElanGen8TsFwFileIoUtility.o \
+		   ElanGen8TsFwUpdateFlow.o \
 		   main.o
 libraries := stdc++ rt pthread
 executable_path := ./bin
@@ -15,7 +20,8 @@ source_path := ./src
 include_path := ./include 
 
 CXX ?= g++ # Compiler: GCC C++ Compiler
-#CXX ?= arm-none-linux-gnueabi-g++ # Compiler: arm cross compiler
+#CXX ?= arm-none-linux-gnueabi-g++ # Compiler: arm Cross Compiler 
+#CXX ?= aarch64-none-linux-gnu-g++ # Compiler: aarch64 Cross Compiler 
 CXXFLAGS = -Wall -Wno-format-overflow -ansi -O3 -g
 CXXFLAGS += -D__ENABLE_DEBUG__
 CXXFLAGS += -D__ENABLE_OUTBUF_DEBUG__
