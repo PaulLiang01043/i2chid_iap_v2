@@ -199,6 +199,45 @@ CALIBRATE_TOUCH_WITH_ERROR_RETRY_EXIT:
     return err;
 }
 
+int get_rek_counter(unsigned short *p_rek_counter)
+{
+    int err = TP_SUCCESS;
+    unsigned short rek_counter = 0;
+
+    // Validate Input Buffer
+    if(p_rek_counter == NULL)
+    {
+        ERROR_PRINTF("%s: NULL ReK Counter Buffer!\r\n", __func__);
+        err = TP_ERR_INVALID_PARAM;
+        goto GET_REK_COUNTER_EXIT;
+    }
+
+    // Send Command
+    err = send_rek_counter_command();
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("%s: Fail to Send ReK Counter Command! err=0x%x.\r\n", __func__, err);
+        goto GET_REK_COUNTER_EXIT;
+    }
+
+    // Receive Data
+    err = receive_rek_counter_data(&rek_counter);
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("%s: Fail to Receive ReK Counter Data! err=0x%x.\r\n", __func__, err);
+        goto GET_REK_COUNTER_EXIT;
+    }
+
+    // Load ReK Counter to Input Buffer
+    *p_rek_counter = rek_counter;
+
+    // Success
+    err = TP_SUCCESS;
+
+GET_REK_COUNTER_EXIT:
+    return err;
+}
+
 // Hello Packet & BC Version
 int get_hello_packet_bc_version(unsigned char *p_hello_packet, unsigned short *p_bc_version)
 {

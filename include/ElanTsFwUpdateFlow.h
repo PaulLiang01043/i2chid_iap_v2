@@ -42,6 +42,21 @@
 #define ACTION_CODE_INFORMATION_UPDATE	0x02
 #endif // ACTION_CODE_INFORMATION_UPDATE
 
+/*******************************************
+ * Data Structure Declaration
+ ******************************************/
+
+/*
+ * Message MODE DEFINITION
+ */
+enum message_mode
+{
+    FULL_MESSAGE	= 0,	// Full Message Output
+    SILENT_MODE		= 1,	// Only Key Value Output
+    NO_MESSAGE		= 2		// No Message Ouput
+};
+typedef enum message_mode message_mode_t;
+
 /***************************************************
  * Extern Variables Declaration
  ***************************************************/
@@ -51,7 +66,10 @@
  ***************************************************/
 
 // Firmware Information
-int get_firmware_information(bool silent_mode);
+int get_firmware_information(message_mode_t msg_mode);
+
+// Calibration Counter
+int get_calibration_counter(message_mode_t msg_mode);
 
 // Remark ID Check
 int check_remark_id(bool recovery);

@@ -32,7 +32,7 @@
  ***************************************************/
 
 // Firmware Information
-int gen8_get_firmware_information(bool silent_mode)
+int gen8_get_firmware_information(message_mode_t msg_mode)
 {
     int err = TP_SUCCESS;
     unsigned short fw_id = 0,
@@ -40,7 +40,7 @@ int gen8_get_firmware_information(bool silent_mode)
                    test_version = 0,
                    bc_version = 0;
 
-    if(silent_mode == true) // Enable Silent Mode
+    if(msg_mode == SILENT_MODE) // Enable Silent Mode
     {
         // Firmware Version
         err = get_fw_version(&fw_version);
@@ -78,6 +78,37 @@ int gen8_get_firmware_information(bool silent_mode)
     }
 
 GEN8_GET_FW_INFO_EXIT:
+    return err;
+}
+
+// Calibration Counter
+int gen8_get_calibration_counter(message_mode_t msg_mode)
+{
+    int err = TP_SUCCESS;
+    unsigned short calibration_counter = 0;
+
+    /* [Note] 2022/10/19
+     * Calibration counter default configured as 0 since Gen8 touch does not support calibration command and counter.
+     * Gen8 touch re-calibrates itself in touch power-on sequence.
+     */
+
+    switch (msg_mode)
+    {
+        case FULL_MESSAGE:
+            printf("--------------------------------\r\n");
+            printf("Calibration Counter: %04x.\r\n", calibration_counter);
+            break;
+
+        case SILENT_MODE:
+            printf("%04x", calibration_counter);
+            break;
+
+        case NO_MESSAGE:
+        default:
+            // Do Nothing
+            break;
+    }
+
     return err;
 }
 

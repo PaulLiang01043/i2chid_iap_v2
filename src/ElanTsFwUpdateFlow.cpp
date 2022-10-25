@@ -30,7 +30,7 @@
  ***************************************************/
 
 // Firmware Information
-int get_firmware_information(bool silent_mode)
+int get_firmware_information(message_mode_t msg_mode)
 {
     int err = TP_SUCCESS;
     unsigned short fw_id = 0,
@@ -38,7 +38,7 @@ int get_firmware_information(bool silent_mode)
                    test_version = 0,
                    bc_version = 0;
 
-    if(silent_mode == true) // Enable Silent Mode
+    if(msg_mode == SILENT_MODE) // Enable Silent Mode
     {
         // Firmware Version
         err = get_fw_version(&fw_version);
@@ -80,6 +80,45 @@ int get_firmware_information(bool silent_mode)
     }
 
 GET_FW_INFO_EXIT:
+    return err;
+}
+
+// Calibration Counter
+int get_calibration_counter(message_mode_t msg_mode)
+{
+    int err = TP_SUCCESS;
+    unsigned short calibration_counter = 0;
+
+    // Calibration Counter
+    err = get_rek_counter(&calibration_counter);
+    if(err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("%s: Fail to Get Calibration Counter! err=0x%x.\r\n", __func__, err);
+        goto GET_CALIBRATION_COUNTER_EXIT;
+    }
+
+
+    switch (msg_mode)
+    {
+        case FULL_MESSAGE:
+            printf("--------------------------------\r\n");
+            printf("Calibration Counter: %04x.\r\n", calibration_counter);
+            break;
+
+        case SILENT_MODE:
+            printf("%04x", calibration_counter);
+            break;
+
+        case NO_MESSAGE:
+        default:
+            // Do Nothing
+            break;
+    }
+
+    // Success
+    err = TP_SUCCESS;
+
+GET_CALIBRATION_COUNTER_EXIT:
     return err;
 }
 

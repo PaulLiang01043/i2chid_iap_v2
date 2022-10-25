@@ -614,25 +614,25 @@ const char* CI2CHIDLinuxGet::bus_str(int bus)
 {
     switch (bus)
     {
-    case BUS_USB:
-        return "USB";
+        case BUS_USB:
+            return "USB";
 
-    case BUS_HIL:
-        return "HIL";
+        case BUS_HIL:
+            return "HIL";
 
-    case BUS_BLUETOOTH:
-        return "Bluetooth";
+        case BUS_BLUETOOTH:
+            return "Bluetooth";
 
 #if 0 // Disable this convert since the definition is not include in input.h of android sdk.
-    case BUS_VIRTUAL:
-        return "Virtual";
+        case BUS_VIRTUAL:
+            return "Virtual";
 #endif // 0
 
-    case BUS_I2C:
-        return "I2C";
+        case BUS_I2C:
+            return "I2C";
 
-    default:
-        return "Other";
+        default:
+            return "Other";
     }
 }
 

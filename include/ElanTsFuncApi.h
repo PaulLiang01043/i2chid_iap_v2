@@ -165,6 +165,9 @@ int get_solution_id(unsigned char *p_solution_id);
 int calibrate_touch(void);
 int calibrate_touch_with_error_retry(int retry_count);
 
+// Calibration Counter
+int get_rek_counter(unsigned short *p_rek_counter);
+
 // Hello Packet / BC Version
 int get_hello_packet_bc_version(unsigned char *p_hello_packet, unsigned short *p_bc_version);
 int get_hello_packet_bc_version_with_error_retry(unsigned char *p_hello_packet, unsigned short *p_bc_version, int retry_count);

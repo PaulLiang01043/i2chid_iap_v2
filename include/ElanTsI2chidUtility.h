@@ -131,6 +131,10 @@ int get_boot_code_version_data(unsigned short *p_bc_version);
 int send_rek_command(void);
 int receive_rek_response(void);
 
+// Calibration Counter
+int send_rek_counter_command(void);
+int receive_rek_counter_data(unsigned short *p_rek_counter);
+
 // Test Mode
 int send_enter_test_mode_command(void);
 int send_exit_test_mode_command(void);

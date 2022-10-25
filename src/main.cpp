@@ -20,18 +20,18 @@
 #include "ElanGen8TsI2chidHwParameters.h"
 #include "ElanGen8TsFwUpdateFlow.h"
 
-/***************************************************
+/*******************************************
  * Definitions
- ***************************************************/
+ ******************************************/
 
 // SW Version
 #ifndef ELAN_TOOL_SW_VERSION
-#define	ELAN_TOOL_SW_VERSION 	"4.0"
+#define	ELAN_TOOL_SW_VERSION 	"4.1"
 #endif //ELAN_TOOL_SW_VERSION
 
 // SW Release Date
 #ifndef ELAN_TOOL_SW_RELEASE_DATE
-#define ELAN_TOOL_SW_RELEASE_DATE	"2022-08-12"
+#define ELAN_TOOL_SW_RELEASE_DATE	"2022-10-24"
 #endif //ELAN_TOOL_SW_RELEASE_DATE
 
 #ifdef __SUPPORT_RESULT_LOG__
@@ -40,9 +40,9 @@
 #endif //DEFAULT_LOG_FILENAME
 #endif //__SUPPORT_RESULT_LOG__
 
-/***************************************************
+/*******************************************
  * Feature Configurations
- ***************************************************/
+ ******************************************/
 
 /*******************************************
  * Global Variables Declaration
@@ -77,6 +77,9 @@ bool g_get_fw_info = false;
 // Re-Calibration (Re-K)
 bool g_rek = false;
 
+// Calibration Counter
+bool g_get_rek_counter = false;
+
 // Skip Action Code
 int g_skip_action_code = 0;
 
@@ -85,17 +88,17 @@ int g_skip_action_code = 0;
 char g_log_file[FILE_NAME_LENGTH_MAX] = {0};
 #endif //__SUPPORT_RESULT_LOG__
 
-// Silent Mode
-bool g_silent_mode = false;
+// Message Mode
+message_mode_t	g_msg_mode = FULL_MESSAGE;
 
 // Help Info.
 bool g_help = false;
 
 // Parameter Option Settings
 #ifdef __SUPPORT_RESULT_LOG__
-const char* const short_options = "p:P:f:s:oikl:qdh";
+const char* const short_options = "p:P:f:s:oikcl:qdh";
 #else
-const char* const short_options = "p:P:f:s:oikqdh";
+const char* const short_options = "p:P:f:s:oikcqdh";
 #endif //__SUPPORT_RESULT_LOG__
 const struct option long_options[] =
 {
@@ -105,6 +108,7 @@ const struct option long_options[] =
     { "skip_action",			1, NULL, 's'},
     { "firmware_information",	0, NULL, 'i'},
     { "calibration",			0, NULL, 'k'},
+    { "calibration_counter",	0, NULL, 'c'},
 #ifdef __SUPPORT_RESULT_LOG__
     { "log_filename",			1, NULL, 'l'},
 #endif //__SUPPORT_RESULT_LOG__
@@ -257,7 +261,7 @@ int generate_result_log(char *filename, size_t filename_len, bool result)
     int err = TP_SUCCESS;
     FILE *fd = NULL;
 
-    if(g_silent_mode == false) // Disable Silent Mode
+    if(g_msg_mode == FULL_MESSAGE) // Disable Silent Mode
         printf("--------------------------------\r\n");
 
     // Make Sure Filename Valid
@@ -340,6 +344,11 @@ void show_help_information(void)
     printf("\n[Re-Calibarion]\r\n");
     printf("-k.\r\n");
     printf("Ex: elan_iap -k\r\n");
+
+    // Re-Calibarion
+    printf("\n[Calibarion Counter]\r\n");
+    printf("-c.\r\n");
+    printf("Ex: elan_iap -c\r\n");
 
 #ifdef __SUPPORT_RESULT_LOG__
     // Result Log
@@ -604,6 +613,13 @@ int process_parameter(int argc, char **argv)
                 DEBUG_PRINTF("%s: Re-Calibration: %s.\r\n", __func__, (g_rek) ? "Enable" : "Disable");
                 break;
 
+            case 'c': /* Calibration Counter */
+
+                // Set "Get Calibration Counter" Flag
+                g_get_rek_counter = true;
+                DEBUG_PRINTF("%s: Get Calibration Counter: %s.\r\n", __func__, (g_get_rek_counter) ? "Enable" : "Disable");
+                break;
+
 #ifdef __SUPPORT_RESULT_LOG__
             case 'l': /* Log Filename */
 
@@ -637,8 +653,8 @@ int process_parameter(int argc, char **argv)
             case 'q': /* Silent Mode (Quiet) */
 
                 // Enable Silent Mode
-                g_silent_mode = true;
-                DEBUG_PRINTF("%s: Silent Mode: %s.\r\n", __func__, (g_silent_mode == true) ? "Enable" : "Disable");
+                g_msg_mode = SILENT_MODE;
+                DEBUG_PRINTF("%s: Silent Mode: %s.\r\n", __func__, (g_msg_mode == SILENT_MODE) ? "Enable" : "Disable");
                 break;
 
             case 'd': /* Debug Option */
@@ -701,6 +717,7 @@ int main(int argc, char **argv)
     unsigned char hello_packet = 0;
     bool gen8_touch = false,	// True if Gen8 Touch
          recovery = false;		// True if Recovery Mode
+    message_mode_t msg_mode;
 
     // Process Parameter
     err = process_parameter(argc, argv);
@@ -709,7 +726,7 @@ int main(int argc, char **argv)
         goto EXIT;
     }
 
-    if (g_silent_mode == false) // Disable Silent Mode
+    if(g_msg_mode == FULL_MESSAGE) // Disable Silent Mode
     {
         printf("i2chid_iap v%s %s.\r\n", ELAN_TOOL_SW_VERSION, ELAN_TOOL_SW_RELEASE_DATE);
     }
@@ -800,8 +817,9 @@ int main(int argc, char **argv)
     if(recovery == true)
     {
         printf("In Recovery Mode.\r\n");
-        g_get_fw_info = false;	// Disable Get FW Info.
-        g_rek = false;			// Disable Re-Calibration
+        g_get_fw_info = false;		// Disable Get FW Info.
+        g_rek = false;				// Disable Re-Calibration
+        g_get_rek_counter = false;	// Disable Get Calibration Counter
     }
 
     /* Get FW Information */
@@ -809,12 +827,35 @@ int main(int argc, char **argv)
     {
         DEBUG_PRINTF("Get FW Info.\r\n");
         if(gen8_touch) // Gen8 Touch
-            err = gen8_get_firmware_information(g_silent_mode);
+            err = gen8_get_firmware_information(g_msg_mode);
         else // Gen5/6/7 Touch
-            err = get_firmware_information(g_silent_mode);
+            err = get_firmware_information(g_msg_mode);
         if(err != TP_SUCCESS)
         {
             ERROR_PRINTF("Fail to Get FW Info!\r\n");
+            goto EXIT2;
+        }
+    }
+
+    /* Get Calibration Counter */
+    if((g_get_rek_counter == true) && (g_update_fw == false))
+    {
+        DEBUG_PRINTF("Get Calibration Counter.\r\n");
+
+        // If with calibration, change message mode to NO_MESSAGE.
+        if(g_rek == true)
+            msg_mode = NO_MESSAGE;
+        else // In General Case
+            msg_mode = g_msg_mode;
+
+        // Get Calibration Counter
+        if(gen8_touch) // Gen8 Touch
+            err = gen8_get_calibration_counter(msg_mode);
+        else // Gen5/6/7 Touch
+            err = get_calibration_counter(msg_mode);
+        if(err != TP_SUCCESS)
+        {
+            ERROR_PRINTF("Fail to Get Calibration Counter!\r\n");
             goto EXIT2;
         }
     }
@@ -829,6 +870,20 @@ int main(int argc, char **argv)
             if (err != TP_SUCCESS)
             {
                 ERROR_PRINTF("Fail to Calibrate Touch!\r\n");
+                goto EXIT2;
+            }
+
+            // If with getting calibration counter, change message mode to FULL_MESSAGE.
+            if(g_get_rek_counter == true)
+                msg_mode = FULL_MESSAGE;
+            else // In General Case
+                msg_mode = NO_MESSAGE;
+
+            // Verify Calibration with Counter
+            err = get_calibration_counter(msg_mode);
+            if(err != TP_SUCCESS)
+            {
+                ERROR_PRINTF("Fail to Get Calibration Counter!\r\n");
                 goto EXIT2;
             }
         }
@@ -850,9 +905,9 @@ int main(int argc, char **argv)
             // Get FW Info.
             DEBUG_PRINTF("Get FW Info.\r\n");
             if(gen8_touch) // Gen8 Touch
-                err = gen8_get_firmware_information(false /* Disable Silent Mode */);
+                err = gen8_get_firmware_information(FULL_MESSAGE); // Disable Silent Mode
             else // Gen5/6/7 Touch
-                err = get_firmware_information(false /* Disable Silent Mode */);
+                err = get_firmware_information(FULL_MESSAGE); // Disable Silent Mode
             if(err != TP_SUCCESS)
             {
                 ERROR_PRINTF("Fail to Get FW Info!\r\n");
@@ -876,6 +931,18 @@ int main(int argc, char **argv)
             goto EXIT2;
         }
 
+        // Verify FW Update with FW Information
+        DEBUG_PRINTF("Get FW Info.\r\n");
+        if(gen8_touch) // Gen8 Touch
+            err = gen8_get_firmware_information(FULL_MESSAGE); // Disable Silent Mode
+        else // Gen5/6/7 Touch
+            err = get_firmware_information(FULL_MESSAGE); // Disable Silent Mode
+        if(err != TP_SUCCESS)
+        {
+            ERROR_PRINTF("Fail to Get FW Info!\r\n");
+            goto EXIT2;
+        }
+
         // Re-calibrate Touch
         DEBUG_PRINTF("Calibrate Touch...\r\n");
         if(gen8_touch)
@@ -896,15 +963,11 @@ int main(int argc, char **argv)
             }
         }
 
-        // Get FW Info.
-        DEBUG_PRINTF("Get FW Info.\r\n");
-        if(gen8_touch) // Gen8 Touch
-            err = gen8_get_firmware_information(false /* Disable Silent Mode */);
-        else // Gen5/6/7 Touch
-            err = get_firmware_information(false /* Disable Silent Mode */);
+        // Verify Calibration with Counter
+        err = get_calibration_counter(NO_MESSAGE);
         if(err != TP_SUCCESS)
         {
-            ERROR_PRINTF("Fail to Get FW Info!\r\n");
+            ERROR_PRINTF("Fail to Get Calibration Counter!\r\n");
             goto EXIT2;
         }
     }
@@ -928,7 +991,7 @@ EXIT:
         generate_result_log(g_log_file, sizeof(g_log_file), false /* FAIL */);
 #endif //__SUPPORT_RESULT_LOG__
 
-    if(g_silent_mode == false) // Disable Silent Mode
+    if(g_msg_mode == FULL_MESSAGE) // Disable Silent Mode
     {
         // End of Output Stream
         printf("\r\n");

@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include "ElanTsFwUpdateFlow.h" // message_mode_t
 
 /***************************************************
  * Definitions
@@ -41,7 +42,10 @@
  ***************************************************/
 
 // Firmware Information
-int gen8_get_firmware_information(bool silent_mode);
+int gen8_get_firmware_information(message_mode_t msg_mode);
+
+// Calibration Counter
+int gen8_get_calibration_counter(message_mode_t msg_mode);
 
 // Remark ID Check
 int gen8_check_remark_id(bool recovery);

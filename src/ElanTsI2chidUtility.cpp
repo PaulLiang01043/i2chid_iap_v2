@@ -367,7 +367,6 @@ int get_boot_code_version_data(unsigned short *p_bc_version)
         goto GET_BOOT_CODE_VERSION_DATA_EXIT;
     }
 
-
     major_bc_ver = ((cmd_data[1] & 0x0f) << 4) | ((cmd_data[2] & 0xf0) >> 4);
     minor_bc_ver = ((cmd_data[2] & 0x0f) << 4) | ((cmd_data[3] & 0xf0) >> 4);
     bc_ver = (major_bc_ver << 8) | minor_bc_ver;
@@ -433,6 +432,67 @@ int receive_rek_response(void)
     err = TP_SUCCESS;
 
 RECEIVE_REK_RESPONSE_EXIT:
+    return err;
+}
+
+// Calibration Counter
+int send_rek_counter_command(void)
+{
+    int err = TP_SUCCESS;
+    unsigned char rek_counter_cmd[4] = {0x53, 0xd0, 0x00, 0x01};
+
+    /* Send Disc Program Times Counter Command to touch */
+    DEBUG_PRINTF("cmd: 0x%x, 0x%x, 0x%x, 0x%x.\r\n", rek_counter_cmd[0], rek_counter_cmd[1], rek_counter_cmd[2], rek_counter_cmd[3]);
+    err = write_cmd(rek_counter_cmd, sizeof(rek_counter_cmd), ELAN_WRITE_DATA_TIMEOUT_MSEC);
+    if (err != TP_SUCCESS)
+        ERROR_PRINTF("Fail to send Disc Program Times Counter command! err=0x%x.\r\n", err);
+
+    return err;
+}
+
+int receive_rek_counter_data(unsigned short *p_rek_counter)
+{
+    int err = TP_SUCCESS;
+    unsigned short rek_counter = 0;
+    unsigned char cmd_data[4] = {0},
+                  rek_counter_high_byte = 0,
+                  rek_counter_low_byte = 0;
+
+    /* Check Data Buffer */
+    if(p_rek_counter == NULL)
+    {
+        ERROR_PRINTF("%s: NULL Pointer!\r\n", __func__);
+        err = TP_ERR_INVALID_PARAM;
+        goto RECV_REK_COUNTER_DATA_EXIT;
+    }
+
+    err = read_data(cmd_data, sizeof(cmd_data), ELAN_READ_DATA_TIMEOUT_MSEC);
+    if (err != TP_SUCCESS)
+    {
+        ERROR_PRINTF("Fail to read ReK Counter data, err=0x%x.\r\n", err);
+        goto RECV_REK_COUNTER_DATA_EXIT;
+    }
+    DEBUG_PRINTF("cmd_data: 0x%x, 0x%x, 0x%x, 0x%x.\r\n", cmd_data[0], cmd_data[1], cmd_data[2], cmd_data[3]);
+
+    /* Check if Data is ReK Counter */
+    if ((cmd_data[0] != 0x52) || (cmd_data[1] != 0xd0))
+    {
+        err = TP_ERR_DATA_PATTERN;
+        ERROR_PRINTF("Invalid Data Format (%02x %02x), err=0x%x.\r\n", cmd_data[0], cmd_data[1], err);
+        goto RECV_REK_COUNTER_DATA_EXIT;
+    }
+
+    // ReK Counter
+    rek_counter_high_byte = cmd_data[2];
+    rek_counter_low_byte  = cmd_data[3];
+    rek_counter = (unsigned short)((rek_counter_high_byte << 8) | rek_counter_low_byte);
+    DEBUG_PRINTF("ReK Counter: 0x%04x.\r\n", rek_counter);
+
+    // Load ReK Counter to Input Buffer
+    *p_rek_counter = rek_counter;
+    err = TP_SUCCESS;
+
+RECV_REK_COUNTER_DATA_EXIT:
     return err;
 }
 
